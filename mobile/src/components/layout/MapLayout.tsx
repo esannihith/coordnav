@@ -7,22 +7,21 @@ import { MainBottomSheet } from '../sheets/MainBottomSheet';
 import { useAppStore } from '../../store/useAppStore';
 
 export function MapLayout() {
-  const { uiState, setUiState, setActiveTab } = useAppStore();
+  const { uiState, setUiState, setUiStateAndTab } = useAppStore();
 
   useEffect(() => {
     const onBackPress = () => {
       if (uiState === 'GetDirections' || uiState === 'RouteSelection') {
-        setUiState('PlaceSearch');
+        setUiStateAndTab('PlaceSearch', 'Place');
         return true;
       }
       if (uiState === 'PlaceSearch') {
-        setUiState('Home');
-        setActiveTab('Search');
+        // Clear selected data when going back to Home/Search
+        setUiStateAndTab('Home', 'Search', true);
         return true;
       }
       if (uiState !== 'Home') {
-        setUiState('Home');
-        setActiveTab('Search');
+        setUiStateAndTab('Home', 'Search', true);
         return true; // prevent default behavior (closing the app)
       }
       return false; // let the default behavior happen

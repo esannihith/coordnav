@@ -19,17 +19,8 @@ export interface PlaceData {
   rating: number;
   userRatingCount: number;
   types: string[];
+  location?: { lat: number; lng: number };
 }
-
-export const MOCK_PLACE_DATA: PlaceData = {
-  id: "ChIJF4Yf2Ry7j4AR__1AkytDyAE",
-  name: "places/ChIJF4Yf2Ry7j4AR__1AkytDyAE",
-  displayName: { text: "Googleplex", languageCode: "en" },
-  formattedAddress: "1600 Amphitheatre Pkwy, Mountain View, CA 94043, USA",
-  rating: 4.5,
-  userRatingCount: 38402,
-  types: ["corporate_campus", "point_of_interest", "establishment"]
-};
 
 interface AppState {
   uiState: UIState;
@@ -46,6 +37,17 @@ interface AppState {
   searchResults: any[]; // Specifically AutocompletePrediction[]
   setSearchResults: (results: any[]) => void;
 
+  // Directions State
+  travelMode: string;
+  setTravelMode: (mode: string) => void;
+  routes: any[]; // RouteInfo[]
+  setRoutes: (routes: any[]) => void;
+  selectedRouteId: string | null;
+  setSelectedRouteId: (id: string | null) => void;
+
+  // Unified State & Tab action
+  setUiStateAndTab: (uiState: UIState, activeTab: BottomSheetTab, clearData?: boolean) => void;
+
   // Mock Data
   roomCode: string | null;
   roomName: string | null;
@@ -59,13 +61,26 @@ export const useAppStore = create<AppState>((set) => ({
   setUiState: (state) => set({ uiState: state }),
   setActiveTab: (tab) => set({ activeTab: tab }),
 
-  selectedPlace: MOCK_PLACE_DATA,
+  selectedPlace: null,
   setSelectedPlace: (place) => set({ selectedPlace: place }),
 
   searchQuery: '',
   setSearchQuery: (query) => set({ searchQuery: query }),
   searchResults: [],
   setSearchResults: (results) => set({ searchResults: results }),
+
+  travelMode: 'car', // 'car' | 'walking' | 'bicycling' | 'transit'
+  setTravelMode: (mode) => set({ travelMode: mode }),
+  routes: [],
+  setRoutes: (routes) => set({ routes }),
+  selectedRouteId: null,
+  setSelectedRouteId: (id) => set({ selectedRouteId: id }),
+
+  setUiStateAndTab: (uiState, activeTab, clearData = false) => set((state) => ({ 
+    uiState, 
+    activeTab,
+    ...(clearData ? { selectedPlace: null, routes: [], selectedRouteId: null } : {})
+  })),
 
   roomCode: null,
   roomName: null,

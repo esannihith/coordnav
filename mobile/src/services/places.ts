@@ -33,7 +33,7 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceData | null
   if (!API_KEY) return null;
   
   try {
-    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,rating,user_ratings_total,types&key=${API_KEY}`;
+    const url = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${placeId}&fields=name,formatted_address,rating,user_ratings_total,types,geometry&key=${API_KEY}`;
     const response = await fetch(url);
     const data = await response.json();
     
@@ -48,6 +48,7 @@ export async function getPlaceDetails(placeId: string): Promise<PlaceData | null
       rating: details.rating || 0,
       userRatingCount: details.user_ratings_total || 0,
       types: details.types || [],
+      location: details.geometry?.location ? { lat: details.geometry.location.lat, lng: details.geometry.location.lng } : undefined,
     };
   } catch (error) {
     console.error("Place details error:", error);

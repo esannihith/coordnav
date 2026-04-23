@@ -1,10 +1,21 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
-import { MapPin, Navigation, Star, Users } from 'lucide-react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import { Navigation, Star, Users } from 'lucide-react-native';
+import * as Location from 'expo-location';
 import { useAppStore } from '../../../store/useAppStore';
 
 export function PlaceTab() {
   const { selectedPlace, setUiState, setActiveTab } = useAppStore();
+
+  const handleDirections = async () => {
+    try {
+      await Location.enableNetworkProviderAsync();
+      setUiState('GetDirections');
+      setActiveTab('Directions');
+    } catch (e) {
+      Alert.alert('Location required', 'Please enable location services to get directions.');
+    }
+  };
 
   if (!selectedPlace) {
     return (

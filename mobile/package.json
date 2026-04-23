@@ -10,6 +10,7 @@
   "dependencies": {
     "@googlemaps/react-native-navigation-sdk": "0.15.1",
     "@gorhom/bottom-sheet": "^5.2.10",
+    "@mapbox/polyline": "^1.2.1",
     "@react-native-firebase/app": "^24.0.0",
     "@react-native-firebase/auth": "^24.0.0",
     "@react-native-google-signin/google-signin": "^16.1.2",
@@ -46,6 +47,7 @@
   "private": true,
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.4",
+    "@types/mapbox__polyline": "^1.0.5",
     "@typescript-eslint/eslint-plugin": "^8.59.0",
     "@typescript-eslint/parser": "^8.59.0",
     "eslint": "^9.0.0",
