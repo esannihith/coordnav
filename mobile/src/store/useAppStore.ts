@@ -1,12 +1,12 @@
 import { create } from 'zustand';
 
-export type UIState = 
-  | 'Home' 
-  | 'PlaceSearch' 
-  | 'GetDirections' 
-  | 'RouteSelection' 
-  | 'NavigatingSolo' 
-  | 'InRoom' 
+export type UIState =
+  | 'Home'
+  | 'PlaceSearch'
+  | 'GetDirections'
+  | 'RouteSelection'
+  | 'NavigatingSolo'
+  | 'InRoom'
   | 'InRoomNavigating'
   | 'InRoomGetDirections';
 
@@ -23,15 +23,17 @@ export interface PlaceData {
   location?: { lat: number; lng: number };
 }
 
+type NavReturnTarget = 'Home' | 'InRoom';
+
 interface AppState {
   uiState: UIState;
   activeTab: BottomSheetTab;
   setUiState: (state: UIState) => void;
   setActiveTab: (tab: BottomSheetTab) => void;
-  
+
   selectedPlace: PlaceData | null;
   setSelectedPlace: (place: PlaceData | null) => void;
-  
+
   destination: PlaceData | null;
   setDestination: (place: PlaceData | null) => void;
 
@@ -53,22 +55,16 @@ interface AppState {
   isNavSessionActive: boolean;
   setNavSessionActive: (active: boolean) => void;
 
-  // Room State
-  roomCode: string | null;
-  roomName: string | null;
-  roomDestination: string | null;
-  joinRoom: (code: string, name?: string) => void;
-  leaveRoom: () => void;
-  setRoomDestination: (dest: string | null) => void;
-
   // Unified State & Tab action
   setUiStateAndTab: (uiState: UIState, activeTab: BottomSheetTab, clearData?: boolean) => void;
 
-  // Stop navigation — clears nav data and transitions state
+  // Stop navigation — clears nav data and transitions to Home
   stopNav: () => void;
+  clearNavSessionData: () => void;
+  endNavSession: (target: NavReturnTarget) => void;
 }
 
-export const useAppStore = create<AppState>((set, get) => ({
+export const useAppStore = create<AppState>((set) => ({
   uiState: 'Home',
   activeTab: 'Search',
   setUiState: (state) => set({ uiState: state }),
@@ -83,21 +79,27 @@ export const useAppStore = create<AppState>((set, get) => ({
   isNavSessionActive: false,
   setNavSessionActive: (active) => set({ isNavSessionActive: active }),
 
-  roomCode: null,
-  roomName: null,
-  roomDestination: null,
-  joinRoom: (code, name) => set({ uiState: 'InRoom', roomCode: code, roomName: name || 'Room', activeTab: 'Room' }),
-  leaveRoom: () => set({ uiState: 'Home', roomCode: null, roomName: null, roomDestination: null, activeTab: 'Search' }),
-  setRoomDestination: (dest) => set({ roomDestination: dest }),
-
-  setUiStateAndTab: (uiState, activeTab, clearData = false) => set((state) => ({ 
-    uiState, 
-    activeTab,
-    ...(clearData ? { selectedPlace: null, destination: null, routes: [], selectedRouteId: null, searchQuery: '', searchResults: [] } : {})
-  })),
+  setUiStateAndTab: (uiState, activeTab, clearData = false) =>
+    set(() => ({
+      uiState,
+      activeTab,
+      ...(clearData
+        ? {
+            selectedPlace: null,
+            destination: null,
+            routes: [],
+            selectedRouteId: null,
+            searchQuery: '',
+            searchResults: [],
+          }
+        : {}),
+    })),
 
   stopNav: () => {
-    const { roomCode } = get();
+    useAppStore.getState().endNavSession('Home');
+  },
+
+  clearNavSessionData: () =>
     set({
       isNavSessionActive: false,
       destination: null,
@@ -106,10 +108,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       selectedPlace: null,
       searchQuery: '',
       searchResults: [],
-      uiState: roomCode ? 'InRoom' : 'Home',
-      activeTab: roomCode ? 'Room' : 'Search',
-    });
-  },
+    }),
+
+  endNavSession: (target) =>
+    set({
+      isNavSessionActive: false,
+      destination: null,
+      routes: [],
+      selectedRouteId: null,
+      selectedPlace: null,
+      searchQuery: '',
+      searchResults: [],
+      uiState: target === 'InRoom' ? 'InRoom' : 'Home',
+      activeTab: target === 'InRoom' ? 'Room' : 'Search',
+    }),
 
   searchQuery: '',
   setSearchQuery: (query) => set({ searchQuery: query }),

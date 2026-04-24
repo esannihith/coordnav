@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity, ScrollView } from "react-native";
-import { SafeAreaProvider } from "react-native-safe-area-context";
 import { MapLayout } from "../../components/layout/MapLayout";
 import { useAppStore, UIState } from "../../store/useAppStore";
 import { Wrench } from "lucide-react-native";
+import { NavigationProvider, TaskRemovedBehavior } from '@googlemaps/react-native-navigation-sdk';
 
 function DevMenu() {
   const [isOpen, setIsOpen] = useState(false);
@@ -47,24 +47,25 @@ function DevMenu() {
   );
 }
 
-import { NavigationProvider, TaskRemovedBehavior } from '@googlemaps/react-native-navigation-sdk';
+const safeTaskRemovedBehavior =
+  (TaskRemovedBehavior as unknown as { QUIT_SERVICE?: TaskRemovedBehavior }).QUIT_SERVICE ??
+  TaskRemovedBehavior.CONTINUE_SERVICE;
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <NavigationProvider
-        termsAndConditionsDialogOptions={{
-          title: 'TripRoom Terms',
-          companyName: 'TripRoom',
-          showOnlyDisclaimer: true,
-        }}
-        taskRemovedBehavior={TaskRemovedBehavior.CONTINUE_SERVICE}
-      >
-        <View className="flex-1 bg-black">
-          <MapLayout />
-          {/* <DevMenu /> */}
-        </View>
-      </NavigationProvider>
-    </SafeAreaProvider>
+    <NavigationProvider
+      termsAndConditionsDialogOptions={{
+        title: 'TripRoom Terms',
+        companyName: 'TripRoom',
+        showOnlyDisclaimer: true,
+      }}
+      // Avoid stale guidance/session artifacts after app task is removed.
+      taskRemovedBehavior={safeTaskRemovedBehavior}
+    >
+      <View className="flex-1 bg-black">
+        <MapLayout />
+        {/* <DevMenu /> */}
+      </View>
+    </NavigationProvider>
   );
 }

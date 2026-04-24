@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { View, BackHandler, Alert } from 'react-native';
+import { View, BackHandler, Alert, AppState } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MainMap } from '../map/MainMap';
 import { Header } from './Header';
@@ -7,148 +7,210 @@ import { FABStack } from '../controls/FABStack';
 import { MainBottomSheet } from '../sheets/MainBottomSheet';
 import { useNavigation } from '@googlemaps/react-native-navigation-sdk';
 import { useAppStore } from '../../store/useAppStore';
-import { stopNavigation } from '../../services/navigationService';
+import { useRoomStore } from '../../store/useRoomStore';
+import {
+  isNativeGuidanceRunning,
+  resetNativeNavigationSession,
+  stopNavigation,
+} from '../../services/navigationService';
 
 export function MapLayout() {
   const [isMapReady, setIsMapReady] = React.useState(false);
+  const didRunStartupCleanupRef = React.useRef(false);
+
   const uiState = useAppStore((s) => s.uiState);
   const activeTab = useAppStore((s) => s.activeTab);
+  const isNavSessionActive = useAppStore((s) => s.isNavSessionActive);
   const setUiStateAndTab = useAppStore((s) => s.setUiStateAndTab);
-  const stopNav = useAppStore((s) => s.stopNav);
-  const leaveRoom = useAppStore((s) => s.leaveRoom);
+  const endNavSession = useAppStore((s) => s.endNavSession);
+
+  const isInRoom = useRoomStore((s) => s.isInRoom);
+  const leaveRoom = useRoomStore((s) => s.leaveRoom);
 
   const { navigationController } = useNavigation();
 
   useEffect(() => {
-    // Small delay to allow BottomSheet to initialize before Map heavy lifting
     const timer = setTimeout(() => setIsMapReady(true), 100);
     return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
+    if (didRunStartupCleanupRef.current) {
+      return;
+    }
+
+    didRunStartupCleanupRef.current = true;
+    let cancelled = false;
+
+    // Defensive startup reset: clear lingering native guidance and reconcile JS UI/session state.
+    const bootstrapCleanup = async () => {
+      await resetNativeNavigationSession(navigationController);
+      if (cancelled) return;
+      const appState = useAppStore.getState();
+      const navLikeUi = appState.uiState === 'NavigatingSolo' || appState.uiState === 'InRoomNavigating';
+
+      if (appState.isNavSessionActive || navLikeUi) {
+        const target = useRoomStore.getState().isInRoom ? 'InRoom' : 'Home';
+        endNavSession(target);
+      }
+    };
+
+    void bootstrapCleanup();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [navigationController, endNavSession]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const reconcileOnActive = async () => {
+      const appState = useAppStore.getState();
+      const navLikeUi = appState.uiState === 'NavigatingSolo' || appState.uiState === 'InRoomNavigating';
+
+      if (!appState.isNavSessionActive && !navLikeUi) {
+        return;
+      }
+
+      const guidanceActive = await isNativeGuidanceRunning(navigationController);
+      if (cancelled || guidanceActive) {
+        return;
+      }
+
+      const target = useRoomStore.getState().isInRoom ? 'InRoom' : 'Home';
+      endNavSession(target);
+    };
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void reconcileOnActive();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      subscription.remove();
+    };
+  }, [navigationController, endNavSession]);
+
+  useEffect(() => {
+    const inRoomState = uiState === 'InRoom' || uiState === 'InRoomNavigating' || uiState === 'InRoomGetDirections';
+    const navState = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
+
+    // Keep room/UI state aligned with room store state.
+    if (inRoomState && !isInRoom) {
+      setUiStateAndTab('Home', 'Search', true);
+      return;
+    }
+
+    if (!inRoomState && isInRoom) {
+      setUiStateAndTab('InRoom', 'Room');
+      return;
+    }
+
+    // Keep nav UI state aligned with local nav session state.
+    if (navState && !isNavSessionActive) {
+      endNavSession(isInRoom ? 'InRoom' : 'Home');
+    }
+  }, [uiState, isInRoom, isNavSessionActive, setUiStateAndTab, endNavSession]);
+
+  useEffect(() => {
     const onBackPress = () => {
-      // ── Non-destructive transitions (instant) ──
       if (uiState === 'GetDirections' || uiState === 'RouteSelection') {
         setUiStateAndTab('PlaceSearch', 'Place');
         return true;
       }
+
       if (uiState === 'InRoomGetDirections') {
         setUiStateAndTab('InRoom', 'Place');
         return true;
       }
+
       if (uiState === 'PlaceSearch') {
         setUiStateAndTab('Home', 'Search', true);
         return true;
       }
 
-      // ── Navigating Solo — confirm before exiting nav ──
       if (uiState === 'NavigatingSolo') {
-        Alert.alert(
-          'Exit Navigation?',
-          'This will stop your current navigation session.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Exit',
-              style: 'destructive',
-              onPress: async () => {
-                await stopNavigation(navigationController);
-                stopNav();
-              },
+        Alert.alert('Exit Navigation?', 'This will stop your current navigation session.', [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Exit',
+            style: 'destructive',
+            onPress: async () => {
+              await stopNavigation(navigationController);
+              endNavSession('Home');
             },
-          ]
-        );
-        return true; // consume event, let alert handle the rest
+          },
+        ]);
+        return true;
       }
 
-      // ── InRoomNavigating — tab-level back, then confirm exit nav ──
       if (uiState === 'InRoomNavigating') {
         if (activeTab === 'Place') {
           setUiStateAndTab('InRoomNavigating', 'Search', true);
           return true;
         }
-        // At base tab → confirm exit navigation (back to room)
-        Alert.alert(
-          'Exit Navigation?',
-          'This will stop your current navigation and return to the room.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Exit',
-              style: 'destructive',
-              onPress: async () => {
-                await stopNavigation(navigationController);
-                useAppStore.setState({
-                  isNavSessionActive: false,
-                  destination: null,
-                  routes: [],
-                  selectedRouteId: null,
-                  selectedPlace: null,
-                  searchQuery: '',
-                  searchResults: [],
-                  uiState: 'InRoom',
-                  activeTab: 'Room',
-                });
-              },
+
+        Alert.alert('Exit Navigation?', 'This will stop your current navigation and return to the room.', [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Exit',
+            style: 'destructive',
+            onPress: async () => {
+              await stopNavigation(navigationController);
+              endNavSession('InRoom');
             },
-          ]
-        );
+          },
+        ]);
         return true;
       }
 
-      // ── InRoom — tab-level back, then confirm leave room ──
       if (uiState === 'InRoom') {
         if (activeTab === 'Place') {
           setUiStateAndTab('InRoom', 'Search', true);
           return true;
         }
-        if (activeTab === 'Search') {
+
+        if (activeTab === 'Search' || activeTab === 'Chat') {
           setUiStateAndTab('InRoom', 'Room');
           return true;
         }
-        if (activeTab === 'Chat') {
-          setUiStateAndTab('InRoom', 'Room');
-          return true;
-        }
-        // At base tab (Room) → confirm leave room
-        Alert.alert(
-          'Leave Room?',
-          'Are you sure you want to leave this room?',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Leave',
-              style: 'destructive',
-              onPress: () => leaveRoom(),
+
+        Alert.alert('Leave Room?', 'Are you sure you want to leave this room?', [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Leave',
+            style: 'destructive',
+            onPress: () => {
+              void leaveRoom();
             },
-          ]
-        );
+          },
+        ]);
         return true;
       }
 
-      // ── Default ──
       if (uiState !== 'Home') {
         setUiStateAndTab('Home', 'Search', true);
         return true;
       }
+
       return false;
     };
 
     const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => subscription.remove();
-  }, [uiState, activeTab, setUiStateAndTab, stopNav, leaveRoom, navigationController]);
+  }, [uiState, activeTab, setUiStateAndTab, leaveRoom, navigationController, endNavSession]);
 
   const isNavigating = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
-
   const insets = useSafeAreaInsets();
 
   return (
     <View className="flex-1">
       {isMapReady && <MainMap />}
 
-      {/* UI Overlay Layer */}
       <View className="absolute inset-0 pointer-events-box-none">
-        {/* SDK header renders natively on the NavigationView when nav is active */}
         {!isNavigating && <Header />}
 
         <View

@@ -16,6 +16,114 @@ const TRAVEL_MODE_MAP: Record<string, TravelMode> = {
   transit: TravelMode.DRIVING, // SDK has no transit; fall back to driving
 };
 
+const NAV_READY_TIMEOUT_MS = 3_500;
+const NAV_READY_POLL_MS = 125;
+
+type NavigationControllerLike = NavigationController & {
+  isInitialized?: () => Promise<boolean> | boolean;
+  setOnNavigationReady?: (listener: (() => void) | null) => void;
+  isGuidanceRunning?: () => Promise<boolean> | boolean;
+  stopGuidance?: () => Promise<void>;
+  clearDestinations?: () => Promise<void>;
+  cleanup?: () => Promise<void>;
+};
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function isNavigatorInitialized(controller: NavigationControllerLike): Promise<boolean> {
+  if (typeof controller.isInitialized !== 'function') {
+    return true;
+  }
+
+  try {
+    return Boolean(await controller.isInitialized());
+  } catch {
+    return false;
+  }
+}
+
+export async function waitForNavigatorReady(
+  navigationController: NavigationController,
+  timeoutMs = NAV_READY_TIMEOUT_MS
+): Promise<boolean> {
+  const controller = navigationController as NavigationControllerLike;
+  if (await isNavigatorInitialized(controller)) {
+    return true;
+  }
+
+  if (typeof controller.setOnNavigationReady === 'function') {
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const finish = (ready: boolean) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        try {
+          controller.setOnNavigationReady?.(null);
+        } catch {
+          // Ignore cleanup errors.
+        }
+        resolve(ready);
+      };
+
+      const timeout = setTimeout(() => finish(false), timeoutMs);
+
+      try {
+        controller.setOnNavigationReady(() => finish(true));
+      } catch {
+        finish(false);
+      }
+    });
+  }
+
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (await isNavigatorInitialized(controller)) {
+      return true;
+    }
+    await sleep(NAV_READY_POLL_MS);
+  }
+
+  return false;
+}
+
+async function readGuidanceState(controller: NavigationControllerLike): Promise<boolean> {
+  if (typeof controller.isGuidanceRunning !== 'function') {
+    return false;
+  }
+
+  try {
+    return Boolean(await controller.isGuidanceRunning());
+  } catch {
+    return false;
+  }
+}
+
+async function safeNavCall(label: string, fn: (() => Promise<void>) | undefined): Promise<void> {
+  if (!fn) {
+    return;
+  }
+
+  try {
+    await fn();
+  } catch (error) {
+    console.warn(`[NavService] ${label} failed:`, error);
+  }
+}
+
+export async function isNativeGuidanceRunning(
+  navigationController: NavigationController
+): Promise<boolean> {
+  const ready = await waitForNavigatorReady(navigationController, 1_500);
+  if (!ready) {
+    return false;
+  }
+
+  return readGuidanceState(navigationController as NavigationControllerLike);
+}
+
 /**
  * Initialize the navigation session.
  * Handles Terms & Conditions dialog + SDK init.
@@ -25,6 +133,12 @@ export async function initNavSession(
   navigationController: NavigationController
 ): Promise<boolean> {
   try {
+    const navigatorReady = await waitForNavigatorReady(navigationController);
+    if (!navigatorReady) {
+      console.warn('[NavService] Navigator not ready; init skipped');
+      return false;
+    }
+
     console.log('[NavService] Requesting Terms & Conditions dialog...');
     const termsAccepted =
       await navigationController.showTermsAndConditionsDialog();
@@ -70,6 +184,11 @@ export async function startNavigation(
   destination: PlaceData,
   travelMode: string = 'car'
 ): Promise<RouteStatus> {
+  const navigatorReady = await waitForNavigatorReady(navigationController);
+  if (!navigatorReady) {
+    return 'NO_ROUTE_FOUND' as RouteStatus;
+  }
+
   const waypoint: { placeId?: string; title?: string; position?: { lat: number; lng: number } } = {
     title: destination.displayName?.text || destination.name,
   };
@@ -113,11 +232,29 @@ export async function startNavigation(
 export async function stopNavigation(
   navigationController: NavigationController
 ): Promise<void> {
-  try {
-    await navigationController.stopGuidance();
-    await navigationController.clearDestinations();
-    console.log('[NavService] Navigation stopped');
-  } catch (error) {
-    console.error('[NavService] Stop error:', error);
+  await resetNativeNavigationSession(navigationController);
+}
+
+/**
+ * Defensive reset used on startup/resume and explicit nav exits.
+ * Waits for navigator readiness before issuing commands.
+ */
+export async function resetNativeNavigationSession(
+  navigationController: NavigationController
+): Promise<void> {
+  const controller = navigationController as NavigationControllerLike;
+  const ready = await waitForNavigatorReady(navigationController);
+
+  if (!ready) {
+    console.log('[NavService] Skip reset: navigator not ready yet');
+    return;
   }
+
+  const guidanceRunning = await readGuidanceState(controller);
+  if (guidanceRunning) {
+    await safeNavCall('stopGuidance', controller.stopGuidance?.bind(controller));
+  }
+
+  await safeNavCall('clearDestinations', controller.clearDestinations?.bind(controller));
+  console.log('[NavService] Navigation session reset');
 }

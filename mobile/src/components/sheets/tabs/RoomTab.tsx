@@ -1,227 +1,387 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
-import { Plus, LogIn, ChevronLeft, MapPin, User, Phone, Navigation, LogOut, Copy } from 'lucide-react-native';
+import { ChevronLeft, LogIn, Plus, User, XCircle } from 'lucide-react-native';
+import { useRouter } from 'expo-router';
+import { useNavigation } from '@googlemaps/react-native-navigation-sdk';
+import { useAuthStore } from '../../../store/useAuthStore';
 import { useAppStore } from '../../../store/useAppStore';
+import { useRoomStore } from '../../../store/useRoomStore';
+import { useToastStore } from '../../../store/useToastStore';
+import { isMemberStale, normalizeRoomCode } from '../../../services/roomService';
+import { stopNavigation } from '../../../services/navigationService';
+
+function formatRelative(updatedAtMs: number | null): string {
+  if (!updatedAtMs) return 'never';
+
+  const deltaSeconds = Math.max(1, Math.floor((Date.now() - updatedAtMs) / 1000));
+  if (deltaSeconds < 60) return `${deltaSeconds}s ago`;
+
+  const deltaMinutes = Math.floor(deltaSeconds / 60);
+  if (deltaMinutes < 60) return `${deltaMinutes}m ago`;
+
+  const deltaHours = Math.floor(deltaMinutes / 60);
+  return `${deltaHours}h ago`;
+}
+
+function memberInitial(displayName: string): string {
+  const trimmed = displayName.trim();
+  if (!trimmed) return '?';
+  return trimmed.charAt(0).toUpperCase();
+}
 
 export function RoomTab() {
-  const { roomCode, roomName, roomDestination, joinRoom, leaveRoom, setRoomDestination } = useAppStore();
+  const router = useRouter();
+  const user = useAuthStore((s) => s.user);
+  const uiState = useAppStore((s) => s.uiState);
+  const endNavSession = useAppStore((s) => s.endNavSession);
+  const toastError = useToastStore((s) => s.error);
+  const { navigationController } = useNavigation();
+
+  const {
+    currentRoomCode,
+    currentRoomName,
+    ownerUid,
+    isInRoom,
+    isOwner,
+    members,
+    isSharing,
+    shareIntentOn,
+    shareStatus,
+    actionState,
+    error,
+    createRoom,
+    joinRoom,
+    leaveRoom,
+    endRoom,
+    toggleSharing,
+    setError,
+  } = useRoomStore();
+
   const [isCreating, setIsCreating] = useState(false);
   const [createRoomName, setCreateRoomName] = useState('');
-  const [createDestination, setCreateDestination] = useState('');
+  const [joinCode, setJoinCode] = useState('');
 
-  const handleLeaveRoom = () => {
-    Alert.alert(
-      'Leave Room?',
-      'Are you sure you want to leave this room?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: () => leaveRoom(),
-        },
-      ]
-    );
+  const isBusy = actionState !== 'idle';
+
+  const sharingStatusText = useMemo(() => {
+    if (shareStatus === 'starting') return 'Starting live sharing...';
+    if (shareStatus === 'paused') return 'Sharing paused in background';
+    if (shareStatus === 'error') return 'Could not share location';
+    if (isSharing) return 'Sharing live location';
+    return 'Sharing is off';
+  }, [isSharing, shareStatus]);
+
+  useEffect(() => {
+    return () => {
+      setError(null);
+    };
+  }, [setError]);
+
+  const clearNavigationIfActive = async () => {
+    const isNavigating = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
+    if (!isNavigating) {
+      return;
+    }
+
+    try {
+      await stopNavigation(navigationController);
+    } catch {
+      toastError('Could not fully stop navigation before room action.');
+    }
+    endNavSession('InRoom');
   };
 
-  // ── In Room State ──
-  if (roomCode) {
-    // Mock people data - this would normally come from a room provider/hook
-    const people = [
-      { name: 'Sarah Miller', status: 'Driving • 5 min away', isSelf: false },
-      { name: 'Alex Chen', status: 'Parked', isSelf: false },
-      { name: 'You', status: 'Sharing location', isSelf: true },
-    ];
+  const handleLeaveRoom = () => {
+    Alert.alert('Leave room?', 'You will stop sharing and leave this room.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Leave',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            try {
+              await clearNavigationIfActive();
+              await leaveRoom();
+            } catch {}
+          })();
+        },
+      },
+    ]);
+  };
 
+  const handleEndRoom = () => {
+    Alert.alert('End room for everyone?', 'This will remove the room for all participants.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'End Room',
+        style: 'destructive',
+        onPress: () => {
+          void (async () => {
+            try {
+              await clearNavigationIfActive();
+              await endRoom();
+            } catch {}
+          })();
+        },
+      },
+    ]);
+  };
+
+  const handleCreateRoom = async () => {
+    try {
+      await createRoom(createRoomName);
+      setIsCreating(false);
+      setCreateRoomName('');
+    } catch {
+      // Store already exposes friendly error text.
+    }
+  };
+
+  const handleJoinRoom = async () => {
+    try {
+      await joinRoom(joinCode);
+      setJoinCode('');
+    } catch {
+      // Store already exposes friendly error text.
+    }
+  };
+
+  const toggleShare = () => {
+    void toggleSharing(!shareIntentOn);
+  };
+
+  if (!user) {
     return (
-      <View className="flex-1 px-4 pt-2">
-        <ScrollView showsVerticalScrollIndicator={false}>
-          {/* Room Header Info */}
-          <View className="bg-secondary/50 rounded-2xl p-4 mb-4 border border-border">
-            <View className="flex-row justify-between items-start mb-4">
-              <View className="flex-1">
-                <View className="flex-row items-center mb-1">
-                  <Text className="text-muted text-xs font-bold uppercase tracking-widest mr-2">Active Room</Text>
-                  <View className="px-1.5 py-0.5 rounded-md bg-green-500/20">
-                    <Text className="text-[10px] text-green-400 font-bold uppercase">Live</Text>
-                  </View>
-                </View>
-                <Text className="text-foreground text-xl font-bold">{roomName || 'Our Trip'}</Text>
-              </View>
-              <TouchableOpacity 
-                onPress={handleLeaveRoom}
-                className="bg-red-500/10 p-2.5 rounded-xl border border-red-500/20"
-              >
-                <LogOut color="#ef4444" size={20} />
-              </TouchableOpacity>
-            </View>
-
-            <View className="flex-row items-center bg-background/50 rounded-xl p-3 border border-border/50">
-              <View className="flex-1">
-                <Text className="text-muted text-[10px] font-bold uppercase mb-0.5">Invite Code</Text>
-                <Text className="text-foreground font-mono text-lg tracking-widest">{roomCode}</Text>
-              </View>
-              <TouchableOpacity className="bg-primary/20 p-2 rounded-lg">
-                <Copy color="#3b82f6" size={18} />
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* Room Destination */}
-          <View className="mb-6 px-1">
-            <Text className="text-muted text-xs font-bold uppercase tracking-widest mb-3">Room Destination</Text>
-            {roomDestination ? (
-              <View className="bg-primary/10 rounded-2xl p-4 border border-primary/20 flex-row items-center">
-                <View className="w-10 h-10 bg-primary/20 rounded-full items-center justify-center mr-4">
-                  <MapPin color="#3b82f6" size={20} />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-foreground font-semibold text-base">{roomDestination}</Text>
-                  <Text className="text-muted text-xs">Everyone in room can see this</Text>
-                </View>
-                <TouchableOpacity 
-                  onPress={() => setRoomDestination(null)}
-                  className="p-2"
-                >
-                  <Text className="text-muted text-xs font-bold">CLEAR</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <TouchableOpacity 
-                onPress={() => setRoomDestination('Grand Central Terminal, NY')}
-                className="bg-secondary/30 rounded-2xl p-4 border border-border border-dashed flex-row items-center justify-center"
-              >
-                <Plus color="#3b82f6" size={18} className="mr-2" />
-                <Text className="text-primary font-bold">Set Destination for Group</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-
-          {/* People List */}
-          <View className="mb-2">
-            <View className="flex-row justify-between items-center mb-2 px-1">
-              <Text className="text-muted text-xs font-bold uppercase tracking-widest">People in Room ({people.length})</Text>
-            </View>
-            {people.map((person, i) => (
-              <View key={i} className="flex-row items-center py-4 border-b border-border/50 last:border-b-0">
-                <View className="w-12 h-12 bg-secondary rounded-full items-center justify-center mr-4 border border-border">
-                  <User color="#8e8e93" size={24} />
-                  {person.isSelf && (
-                    <View className="absolute -bottom-1 -right-1 w-4 h-4 bg-green-500 rounded-full border-2 border-[#1c1c1e]" />
-                  )}
-                </View>
-                <View className="flex-1">
-                  <Text className="text-foreground font-semibold text-base">{person.name}</Text>
-                  <Text className="text-muted text-xs">{person.status}</Text>
-                </View>
-                {!person.isSelf && (
-                  <View className="flex-row">
-                    <TouchableOpacity className="w-10 h-10 rounded-full bg-secondary items-center justify-center mr-2 border border-border">
-                      <Phone color="#8e8e93" size={18} />
-                    </TouchableOpacity>
-                    <TouchableOpacity className="w-10 h-10 rounded-full bg-primary/10 items-center justify-center border border-primary/20">
-                      <Navigation color="#3b82f6" size={18} />
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            ))}
-          </View>
-        </ScrollView>
+      <View className="flex-1 px-4 pt-4">
+        <View className="bg-secondary/40 rounded-2xl p-5 border border-border">
+          <Text className="text-foreground text-lg font-bold mb-2">Sign in required</Text>
+          <Text className="text-muted text-sm mb-4">
+            Use Google Sign-In to create or join rooms and share live location.
+          </Text>
+          <TouchableOpacity
+            className="bg-primary py-3 rounded-xl items-center"
+            onPress={() => router.push('/profile')}
+          >
+            <Text className="text-white font-semibold">Open Profile</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
 
-  // ── Create Room Form ──
+  if (isInRoom && currentRoomCode) {
+    return (
+      <View className="flex-1 px-4 pt-2">
+        <ScrollView showsVerticalScrollIndicator={false}>
+          <View className="bg-secondary/50 rounded-2xl p-4 mb-4 border border-border">
+            <View className="flex-row items-start justify-between mb-3">
+              <View className="flex-1 pr-3">
+                <Text className="text-muted text-xs font-bold uppercase tracking-wider mb-1">Active Room</Text>
+                <Text className="text-foreground text-xl font-bold">{currentRoomName || 'Room'}</Text>
+              </View>
+
+              <View className="px-3 py-1 rounded-full bg-primary/20 border border-primary/30">
+                <Text className="text-primary font-mono text-xs tracking-widest">{currentRoomCode}</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              onPress={toggleShare}
+              disabled={isBusy || shareStatus === 'starting'}
+              className={`rounded-xl border px-3 py-3 ${shareIntentOn ? 'bg-green-500/10 border-green-500/30' : 'bg-secondary border-border'}`}
+            >
+              <View className="flex-row items-center justify-between">
+                <Text className={`font-semibold ${shareIntentOn ? 'text-green-400' : 'text-muted'}`}>
+                  {shareIntentOn ? 'Live Sharing ON' : 'Live Sharing OFF'}
+                </Text>
+                {shareStatus === 'starting' && <ActivityIndicator size="small" color="#22c55e" />}
+              </View>
+              <Text className="text-xs text-muted mt-1">{sharingStatusText}</Text>
+            </TouchableOpacity>
+
+            <View className="flex-row mt-3 gap-2">
+              <TouchableOpacity
+                onPress={handleLeaveRoom}
+                disabled={isBusy}
+                className="flex-1 bg-secondary border border-border py-3 rounded-xl items-center"
+              >
+                <Text className="text-foreground font-semibold">Leave Room</Text>
+              </TouchableOpacity>
+
+              {isOwner && (
+                <TouchableOpacity
+                  onPress={handleEndRoom}
+                  disabled={isBusy}
+                  className="flex-1 bg-red-500/15 border border-red-500/30 py-3 rounded-xl items-center"
+                >
+                  <Text className="text-red-400 font-semibold">End Room</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+
+          <View className="mb-3 px-1 flex-row items-center justify-between">
+            <Text className="text-muted text-xs font-bold uppercase tracking-widest">
+              People in Room ({members.length})
+            </Text>
+            {isBusy && <ActivityIndicator size="small" color="#3b82f6" />}
+          </View>
+
+          {members.map((member) => {
+            const isSelf = member.uid === user.uid;
+            const stale = isMemberStale(member);
+
+            let status = member.isSharing ? 'Live location on' : 'Sharing paused';
+            if (member.isSharing && stale) {
+              status = 'Offline (stale update)';
+            }
+
+            return (
+              <View key={member.uid} className="flex-row items-center py-3 border-b border-border/50">
+                <View className="relative mr-3">
+                  <View className="w-11 h-11 rounded-full bg-secondary border border-border items-center justify-center overflow-hidden">
+                    {member.photoURL ? (
+                      <Image source={{ uri: member.photoURL }} className="w-full h-full" />
+                    ) : (
+                      <Text className="text-foreground font-bold text-sm">{memberInitial(member.displayName)}</Text>
+                    )}
+                  </View>
+                  <View
+                    className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border border-background ${
+                      member.isSharing && !stale ? 'bg-green-500' : 'bg-zinc-500'
+                    }`}
+                  />
+                </View>
+
+                <View className="flex-1">
+                  <View className="flex-row items-center">
+                    <Text className="text-foreground font-semibold text-base">{member.displayName}</Text>
+                    {isSelf && <Text className="text-xs text-primary ml-2">You</Text>}
+                    {member.uid === ownerUid && (
+                      <Text className="text-xs text-amber-400 ml-2">Owner</Text>
+                    )}
+                  </View>
+                  <Text className="text-muted text-xs">{status}</Text>
+                  <Text className="text-muted text-[11px] mt-0.5">Last update: {formatRelative(member.updatedAtMs)}</Text>
+                </View>
+              </View>
+            );
+          })}
+
+          {members.length === 0 && (
+            <View className="bg-secondary/20 rounded-xl p-4 border border-border">
+              <Text className="text-muted text-sm">No members found yet.</Text>
+            </View>
+          )}
+        </ScrollView>
+
+        {error && (
+          <View className="absolute bottom-3 left-4 right-4 bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2 flex-row items-center">
+            <XCircle color="#f87171" size={16} />
+            <Text className="text-red-300 text-xs ml-2 flex-1">{error}</Text>
+          </View>
+        )}
+      </View>
+    );
+  }
+
   if (isCreating) {
     return (
-      <View key="create-form" className="flex-1 px-4 pt-2">
+      <View className="flex-1 px-4 pt-2">
         <View className="flex-row items-center mb-6">
-          <TouchableOpacity onPress={() => setIsCreating(false)} className="mr-3 p-1">
+          <TouchableOpacity onPress={() => setIsCreating(false)} className="mr-3 p-1" disabled={isBusy}>
             <ChevronLeft color="#8e8e93" size={24} />
           </TouchableOpacity>
           <Text className="text-xl font-bold text-foreground">Create Room</Text>
         </View>
 
-        <View className="mb-4">
-          <Text className="text-muted text-sm font-medium mb-2 uppercase tracking-wider">Room Name</Text>
-          <BottomSheetTextInput
-            value={createRoomName}
-            onChangeText={setCreateRoomName}
-            placeholder="e.g. Vegas Road Trip"
-            placeholderTextColor="#8e8e93"
-            className="bg-secondary text-foreground px-4 py-3 rounded-xl border border-border text-base"
-          />
-        </View>
-
-        <View className="mb-6">
-          <Text className="text-muted text-sm font-medium mb-2 uppercase tracking-wider">Destination (Optional)</Text>
-          <BottomSheetTextInput
-            value={createDestination}
-            onChangeText={setCreateDestination}
-            placeholder="Search destination..."
-            placeholderTextColor="#8e8e93"
-            className="bg-secondary text-foreground px-4 py-3 rounded-xl border border-border text-base mb-2"
-          />
-          <TouchableOpacity className="flex-row items-center py-2 self-start px-2">
-            <MapPin color="#3b82f6" size={16} className="mr-2" />
-            <Text className="text-primary font-medium">Select on map</Text>
-          </TouchableOpacity>
-        </View>
+        <Text className="text-muted text-xs font-bold uppercase tracking-wider mb-2">Room Name</Text>
+        <BottomSheetTextInput
+          value={createRoomName}
+          onChangeText={setCreateRoomName}
+          editable={!isBusy}
+          placeholder="e.g. Friday Meetup"
+          placeholderTextColor="#8e8e93"
+          className="bg-secondary text-foreground px-4 py-3 rounded-xl border border-border text-base mb-4"
+        />
 
         <TouchableOpacity
-          onPress={() => {
-            joinRoom('NEW123', createRoomName || 'My Room');
-            setIsCreating(false);
-            setCreateRoomName('');
-            setCreateDestination('');
-          }}
-          className="bg-primary py-4 rounded-xl items-center justify-center shadow-lg shadow-primary/20 mt-auto mb-4"
+          onPress={handleCreateRoom}
+          disabled={isBusy}
+          className="bg-primary py-4 rounded-xl items-center justify-center mt-auto mb-4"
+          style={{ opacity: isBusy ? 0.6 : 1 }}
         >
-          <Text className="text-white font-bold text-lg">Create & Join</Text>
+          {actionState === 'creating' ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text className="text-white font-bold text-lg">Create & Join</Text>
+          )}
         </TouchableOpacity>
+
+        {error && (
+          <Text className="text-red-300 text-xs mb-3 text-center">{error}</Text>
+        )}
       </View>
     );
   }
 
   return (
-    <View key="default-form" className="flex-1 px-4 pt-4">
+    <View className="flex-1 px-4 pt-4">
       <TouchableOpacity
-        onPress={() => setIsCreating(true)}
-        className="bg-primary py-4 rounded-xl items-center flex-row justify-center mb-4 shadow-lg shadow-primary/20"
+        onPress={() => {
+          setError(null);
+          setIsCreating(true);
+        }}
+        disabled={isBusy}
+        className="bg-primary py-4 rounded-xl items-center flex-row justify-center mb-4"
+        style={{ opacity: isBusy ? 0.6 : 1 }}
       >
         <Plus color="#fff" size={20} className="mr-2" />
         <Text className="text-white font-bold text-lg">Create New Room</Text>
       </TouchableOpacity>
 
-      <View className="bg-secondary rounded-xl p-4">
+      <View className="bg-secondary rounded-xl p-4 border border-border">
         <Text className="text-muted text-sm mb-2 font-medium uppercase tracking-wider">Join Existing</Text>
         <View className="flex-row items-center">
           <BottomSheetTextInput
+            value={joinCode}
+            onChangeText={(value) => setJoinCode(normalizeRoomCode(value))}
+            editable={!isBusy}
             placeholder="Room Code"
             placeholderTextColor="#8e8e93"
+            maxLength={6}
+            autoCapitalize="characters"
             className="flex-1 bg-background text-foreground px-4 py-3 rounded-lg border border-border font-mono text-lg uppercase mr-2"
           />
+
           <TouchableOpacity
-            onPress={() => joinRoom('ABC999')}
+            onPress={handleJoinRoom}
+            disabled={isBusy || joinCode.length !== 6}
             className="bg-primary w-12 h-12 rounded-lg items-center justify-center"
+            style={{ opacity: isBusy || joinCode.length !== 6 ? 0.5 : 1 }}
           >
-            <LogIn color="#fff" size={20} />
+            {actionState === 'joining' ? <ActivityIndicator color="#fff" /> : <LogIn color="#fff" size={20} />}
           </TouchableOpacity>
         </View>
       </View>
 
-      <Text className="text-muted text-sm mt-6 mb-3 font-medium uppercase tracking-wider">Recent Rooms</Text>
-      <TouchableOpacity className="flex-row items-center py-3 border-b border-border">
-        <View className="w-10 h-10 bg-secondary rounded-full items-center justify-center mr-3">
-          <Text className="text-primary font-bold">#</Text>
+      <View className="mt-6 bg-secondary/25 rounded-xl border border-border p-4">
+        <View className="flex-row items-center mb-2">
+          <User color="#8e8e93" size={16} />
+          <Text className="text-muted ml-2 text-xs uppercase tracking-wider">How rooms work</Text>
         </View>
-        <View className="flex-1">
-          <Text className="text-foreground font-semibold">NYC Trip</Text>
-          <Text className="text-muted text-xs">Ended yesterday • 4 people</Text>
+        <Text className="text-muted text-xs leading-5">
+          Create a room, share the code, and everyone can broadcast live location on the same map. Chat is coming next.
+        </Text>
+      </View>
+
+      {error && (
+        <View className="mt-4 bg-red-500/10 border border-red-500/30 rounded-xl px-3 py-2 flex-row items-center">
+          <XCircle color="#f87171" size={14} />
+          <Text className="text-red-300 text-xs ml-2 flex-1">{error}</Text>
         </View>
-      </TouchableOpacity>
+      )}
     </View>
   );
 }

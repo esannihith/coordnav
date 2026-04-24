@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator, Alert } from 'react-native';
+import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Navigation } from 'lucide-react-native';
 import { useNavigation } from '@googlemaps/react-native-navigation-sdk';
 import { useAppStore } from '../../../store/useAppStore';
+import { useRoomStore } from '../../../store/useRoomStore';
+import { useToastStore } from '../../../store/useToastStore';
 import { getDirections } from '../../../services/directions';
 import { initNavSession, startNavigation } from '../../../services/navigationService';
 
@@ -21,9 +23,10 @@ export function DirectionsTab() {
     setSelectedPlace,
     setSearchQuery,
     setSearchResults,
-    setNavSessionActive,
-    roomCode
+    setNavSessionActive
   } = useAppStore();
+  const isInRoom = useRoomStore((s) => s.isInRoom);
+  const toastError = useToastStore((s) => s.error);
 
   const { navigationController } = useNavigation();
   const [loading, setLoading] = useState(false);
@@ -63,7 +66,7 @@ export function DirectionsTab() {
       if (existingStatus !== 'granted') {
         const { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
-          Alert.alert('Permission Denied', 'Location permissions are required to use navigation.');
+          toastError('Location permission is required to use navigation.', { title: 'Permission Denied' });
           setStarting(false);
           return;
         }
@@ -72,14 +75,16 @@ export function DirectionsTab() {
       // 1. Init SDK session (T&C + init)
       const ready = await initNavSession(navigationController);
       if (!ready) {
-        Alert.alert('Navigation Error', 'Could not initialize navigation. Please check permissions and try again.');
+        toastError('Could not initialize navigation. Please check permissions and try again.', {
+          title: 'Navigation Error',
+        });
         return;
       }
 
       // 2. Start SDK guidance
       const routeStatus = await startNavigation(navigationController, selectedPlace, travelMode);
       if (routeStatus !== 'OK') {
-        Alert.alert('Route Error', `Could not calculate route: ${routeStatus}`);
+        toastError(`Could not calculate route: ${routeStatus}`, { title: 'Route Error' });
         return;
       }
 
@@ -90,14 +95,14 @@ export function DirectionsTab() {
       setSearchResults([]);
       setNavSessionActive(true);
 
-      if (roomCode) {
+      if (isInRoom) {
         setUiStateAndTab('InRoomNavigating', 'Nav');
       } else {
         setUiStateAndTab('NavigatingSolo', 'Nav');
       }
     } catch (error) {
       console.error('Navigation start error:', error);
-      Alert.alert('Error', 'Failed to start navigation.');
+      toastError('Failed to start navigation.');
     } finally {
       setStarting(false);
     }

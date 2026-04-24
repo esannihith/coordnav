@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useEffect } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { useAppStore, BottomSheetTab } from '../../store/useAppStore';
+import { useRoomStore } from '../../store/useRoomStore';
 import { cn } from '../../lib/utils';
 
 // Tabs
@@ -38,12 +39,31 @@ const TAB_COMPONENTS: Record<BottomSheetTab, React.ComponentType> = {
 
 export function MainBottomSheet() {
   const uiState = useAppStore((s) => s.uiState);
+  const isNavSessionActive = useAppStore((s) => s.isNavSessionActive);
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const selectedPlace = useAppStore((s) => s.selectedPlace);
+  const isInRoom = useRoomStore((s) => s.isInRoom);
   const bottomSheetRef = useRef<BottomSheet>(null);
 
-  const config = TAB_CONFIG[uiState] || DEFAULT_CONFIG;
+  const effectiveUiState = useMemo(() => {
+    const navState = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
+    if (navState && !isNavSessionActive) {
+      return isInRoom ? 'InRoom' : 'Home';
+    }
+
+    const roomState = uiState === 'InRoom' || uiState === 'InRoomNavigating' || uiState === 'InRoomGetDirections';
+    if (roomState && !isInRoom) {
+      return 'Home';
+    }
+    if (!roomState && isInRoom) {
+      return 'InRoom';
+    }
+
+    return uiState;
+  }, [uiState, isNavSessionActive, isInRoom]);
+
+  const config = TAB_CONFIG[effectiveUiState] || DEFAULT_CONFIG;
 
   const availableTabs = useMemo(
     () => selectedPlace ? config.tabsWithPlace : config.tabs,
@@ -55,7 +75,7 @@ export function MainBottomSheet() {
   // ── Snap to default index only when uiState changes ──
   useEffect(() => {
     bottomSheetRef.current?.snapToIndex(config.defaultIndex);
-  }, [uiState]);
+  }, [effectiveUiState, config.defaultIndex]);
 
   // ── Auto-select first tab if active tab is no longer valid ──
   useEffect(() => {

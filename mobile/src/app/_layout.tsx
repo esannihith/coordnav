@@ -3,8 +3,10 @@ import "../../global.css";
 import { Slot } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useEffect } from "react";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useAuthStore } from "../store/useAuthStore";
 import { authService } from "../services/authService";
+import { ToastHost } from "../components/feedback/ToastHost";
 
 function RootLayout() {
   const setUser = useAuthStore((state) => state.setUser);
@@ -18,7 +20,10 @@ function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <Slot />
+      <SafeAreaProvider>
+        <Slot />
+        <ToastHost />
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

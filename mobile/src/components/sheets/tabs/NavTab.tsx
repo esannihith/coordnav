@@ -1,9 +1,11 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, Alert } from 'react-native';
+import { View, Text, TouchableOpacity } from 'react-native';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@googlemaps/react-native-navigation-sdk';
 import { useAppStore } from '../../../store/useAppStore';
+import { useRoomStore } from '../../../store/useRoomStore';
 import { stopNavigation } from '../../../services/navigationService';
+import { useToastStore } from '../../../store/useToastStore';
 
 function formatETA(secondsRemaining: number): string {
   const now = new Date();
@@ -34,11 +36,14 @@ function formatDistance(meters: number): string {
 }
 
 export function NavTab() {
-  const uiState = useAppStore((s) => s.uiState);
   const destination = useAppStore((s) => s.destination);
-  const stopNav = useAppStore((s) => s.stopNav);
+  const isNavSessionActive = useAppStore((s) => s.isNavSessionActive);
+  const endNavSession = useAppStore((s) => s.endNavSession);
+  const isInRoom = useRoomStore((s) => s.isInRoom);
+  const toastInfo = useToastStore((s) => s.info);
+  const toastError = useToastStore((s) => s.error);
 
-  const { navigationController, setOnRemainingTimeOrDistanceChanged, setOnArrival, removeAllListeners } = useNavigation();
+  const { navigationController, setOnRemainingTimeOrDistanceChanged, setOnArrival } = useNavigation();
 
   const [eta, setEta] = useState('--:--');
   const [duration, setDuration] = useState('--');
@@ -58,6 +63,12 @@ export function NavTab() {
   }, [navigationController]);
 
   useEffect(() => {
+    if (!isNavSessionActive) {
+      endNavSession(isInRoom ? 'InRoom' : 'Home');
+    }
+  }, [isNavSessionActive, isInRoom, endNavSession]);
+
+  useEffect(() => {
     // Initial fetch
     fetchTimeAndDistance();
 
@@ -68,7 +79,7 @@ export function NavTab() {
 
     setOnArrival((event) => {
       if (event.isFinalDestination) {
-        Alert.alert('Arrived!', `You have arrived at ${destination?.displayName?.text || 'your destination'}.`);
+        toastInfo(`Arrived at ${destination?.displayName?.text || 'your destination'}.`, { title: 'Arrived' });
         handleEndNavigation();
       } else {
         navigationController.continueToNextDestination();
@@ -80,11 +91,22 @@ export function NavTab() {
       setOnRemainingTimeOrDistanceChanged(null);
       setOnArrival(null);
     };
-  }, [navigationController, fetchTimeAndDistance, setOnRemainingTimeOrDistanceChanged, setOnArrival, destination]);
+  }, [
+    navigationController,
+    fetchTimeAndDistance,
+    setOnRemainingTimeOrDistanceChanged,
+    setOnArrival,
+    destination,
+  ]);
 
   const handleEndNavigation = async () => {
-    await stopNavigation(navigationController);
-    stopNav();
+    try {
+      await stopNavigation(navigationController);
+    } catch {
+      toastError('Could not fully stop navigation. UI session was reset.');
+    } finally {
+      endNavSession(isInRoom ? 'InRoom' : 'Home');
+    }
   };
 
   return (

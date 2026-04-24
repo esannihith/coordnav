@@ -3,9 +3,11 @@ import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import { Navigation, Star, Users, MapPinPlus, Share2 } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { useAppStore } from '../../../store/useAppStore';
+import { useRoomStore } from '../../../store/useRoomStore';
 
 export function PlaceTab() {
-  const { selectedPlace, setUiState, setActiveTab, uiState, roomCode, setUiStateAndTab } = useAppStore();
+  const { selectedPlace, setUiState, setActiveTab, uiState, setUiStateAndTab } = useAppStore();
+  const isInRoomSession = useRoomStore((s) => s.isInRoom);
 
   const isNavigating = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
   const isInRoom = uiState === 'InRoom' || uiState === 'InRoomNavigating' || uiState === 'InRoomGetDirections';
@@ -13,7 +15,7 @@ export function PlaceTab() {
   const handleDirections = async () => {
     try {
       await Location.enableNetworkProviderAsync();
-      if (roomCode) {
+      if (isInRoomSession) {
         setUiState('InRoomGetDirections');
       } else {
         setUiState('GetDirections');
