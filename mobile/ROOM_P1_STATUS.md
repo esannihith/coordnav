@@ -25,16 +25,24 @@
   - success/error/info variants,
   - global toast host mounted in app root,
   - native `Alert` kept for destructive confirmations.
+- Room-scoped chat for MVP:
+  - realtime message stream from `rooms/{roomCode}/messages`,
+  - text messaging and place-share messages,
+  - latest 100 message history window,
+  - `Share to Chat` from Place tab sends instantly and opens Chat tab.
 
 ## Known Limitations (Expected for MVP)
-- Chat is out of scope for this phase.
 - Location sharing is foreground-only (no background task manager yet).
 - No cold-start auto-rejoin of rooms.
 - Member liveness is heartbeat/staleness based; no server-side disconnect hooks.
 - Avatar map marker rendering depends on SDK/device support for custom marker icon payloads.
+- Chat is MVP-only: no pagination, edit/delete/reply/read receipts, or push notifications.
+- Firestore rules are mandatory for owner leave/end operations; publish [`mobile/firestore.rules`](/Users/saerukul/projects/coordnav/mobile/firestore.rules) in Firebase Console.
 
 ## Next TODOs
-- Chat domain + tab implementation with room-scoped messages.
+- Chat pagination/infinite scroll for older history.
+- Chat delivery/read status and optional typing indicators.
+- Chat moderation controls (delete/report) and richer place cards/deeplinks.
 - Background location sharing with explicit user controls and battery safeguards.
 - Server-side stale-member cleanup strategy and optional TTL enforcement.
 - Enhanced marker visuals if/when SDK supports reliable custom marker views/icons.

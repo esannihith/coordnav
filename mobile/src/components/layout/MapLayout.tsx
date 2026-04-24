@@ -17,6 +17,7 @@ import {
 export function MapLayout() {
   const [isMapReady, setIsMapReady] = React.useState(false);
   const didRunStartupCleanupRef = React.useRef(false);
+  const startupRetryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const uiState = useAppStore((s) => s.uiState);
   const activeTab = useAppStore((s) => s.activeTab);
@@ -35,20 +36,30 @@ export function MapLayout() {
   }, []);
 
   useEffect(() => {
-    if (didRunStartupCleanupRef.current) {
+    if (didRunStartupCleanupRef.current || !isMapReady) {
       return;
     }
 
-    didRunStartupCleanupRef.current = true;
     let cancelled = false;
 
     // Defensive startup reset: clear lingering native guidance and reconcile JS UI/session state.
     const bootstrapCleanup = async () => {
-      await resetNativeNavigationSession(navigationController);
-      if (cancelled) return;
+      const resetDone = await resetNativeNavigationSession(navigationController);
+      if (cancelled) {
+        return;
+      }
+
+      if (!resetDone) {
+        startupRetryTimerRef.current = setTimeout(() => {
+          startupRetryTimerRef.current = null;
+          void bootstrapCleanup();
+        }, 550);
+        return;
+      }
+
+      didRunStartupCleanupRef.current = true;
       const appState = useAppStore.getState();
       const navLikeUi = appState.uiState === 'NavigatingSolo' || appState.uiState === 'InRoomNavigating';
-
       if (appState.isNavSessionActive || navLikeUi) {
         const target = useRoomStore.getState().isInRoom ? 'InRoom' : 'Home';
         endNavSession(target);
@@ -59,8 +70,12 @@ export function MapLayout() {
 
     return () => {
       cancelled = true;
+      if (startupRetryTimerRef.current) {
+        clearTimeout(startupRetryTimerRef.current);
+        startupRetryTimerRef.current = null;
+      }
     };
-  }, [navigationController, endNavSession]);
+  }, [navigationController, endNavSession, isMapReady]);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,18 +83,20 @@ export function MapLayout() {
     const reconcileOnActive = async () => {
       const appState = useAppStore.getState();
       const navLikeUi = appState.uiState === 'NavigatingSolo' || appState.uiState === 'InRoomNavigating';
-
-      if (!appState.isNavSessionActive && !navLikeUi) {
-        return;
+      if (!appState.isNavSessionActive) {
+        await resetNativeNavigationSession(navigationController);
       }
+      if (cancelled) return;
 
-      const guidanceActive = await isNativeGuidanceRunning(navigationController);
-      if (cancelled || guidanceActive) {
-        return;
+      if (appState.isNavSessionActive || navLikeUi) {
+        const guidanceActive = await isNativeGuidanceRunning(navigationController);
+        if (cancelled || guidanceActive) {
+          return;
+        }
+
+        const target = useRoomStore.getState().isInRoom ? 'InRoom' : 'Home';
+        endNavSession(target);
       }
-
-      const target = useRoomStore.getState().isInRoom ? 'InRoom' : 'Home';
-      endNavSession(target);
     };
 
     const subscription = AppState.addEventListener('change', (nextState) => {
@@ -100,6 +117,16 @@ export function MapLayout() {
 
     // Keep room/UI state aligned with room store state.
     if (inRoomState && !isInRoom) {
+      if (uiState === 'InRoomNavigating' && isNavSessionActive) {
+        setUiStateAndTab('NavigatingSolo', 'Nav');
+        return;
+      }
+
+      if (uiState === 'InRoomGetDirections') {
+        setUiStateAndTab('GetDirections', 'Directions');
+        return;
+      }
+
       setUiStateAndTab('Home', 'Search', true);
       return;
     }

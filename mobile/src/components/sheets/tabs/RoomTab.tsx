@@ -3,13 +3,9 @@ import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Ima
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { ChevronLeft, LogIn, Plus, User, XCircle } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { useNavigation } from '@googlemaps/react-native-navigation-sdk';
 import { useAuthStore } from '../../../store/useAuthStore';
-import { useAppStore } from '../../../store/useAppStore';
 import { useRoomStore } from '../../../store/useRoomStore';
-import { useToastStore } from '../../../store/useToastStore';
 import { isMemberStale, normalizeRoomCode } from '../../../services/roomService';
-import { stopNavigation } from '../../../services/navigationService';
 
 function formatRelative(updatedAtMs: number | null): string {
   if (!updatedAtMs) return 'never';
@@ -33,10 +29,6 @@ function memberInitial(displayName: string): string {
 export function RoomTab() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
-  const uiState = useAppStore((s) => s.uiState);
-  const endNavSession = useAppStore((s) => s.endNavSession);
-  const toastError = useToastStore((s) => s.error);
-  const { navigationController } = useNavigation();
 
   const {
     currentRoomCode,
@@ -78,20 +70,6 @@ export function RoomTab() {
     };
   }, [setError]);
 
-  const clearNavigationIfActive = async () => {
-    const isNavigating = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
-    if (!isNavigating) {
-      return;
-    }
-
-    try {
-      await stopNavigation(navigationController);
-    } catch {
-      toastError('Could not fully stop navigation before room action.');
-    }
-    endNavSession('InRoom');
-  };
-
   const handleLeaveRoom = () => {
     Alert.alert('Leave room?', 'You will stop sharing and leave this room.', [
       { text: 'Cancel', style: 'cancel' },
@@ -101,7 +79,6 @@ export function RoomTab() {
         onPress: () => {
           void (async () => {
             try {
-              await clearNavigationIfActive();
               await leaveRoom();
             } catch {}
           })();
@@ -119,7 +96,6 @@ export function RoomTab() {
         onPress: () => {
           void (async () => {
             try {
-              await clearNavigationIfActive();
               await endRoom();
             } catch {}
           })();
@@ -372,7 +348,7 @@ export function RoomTab() {
           <Text className="text-muted ml-2 text-xs uppercase tracking-wider">How rooms work</Text>
         </View>
         <Text className="text-muted text-xs leading-5">
-          Create a room, share the code, and everyone can broadcast live location on the same map. Chat is coming next.
+          Create a room, share the code, chat with your group, and broadcast live location on the same map.
         </Text>
       </View>
 

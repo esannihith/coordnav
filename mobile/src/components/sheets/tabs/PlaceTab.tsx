@@ -8,6 +8,7 @@ import { useRoomStore } from '../../../store/useRoomStore';
 export function PlaceTab() {
   const { selectedPlace, setUiState, setActiveTab, uiState, setUiStateAndTab } = useAppStore();
   const isInRoomSession = useRoomStore((s) => s.isInRoom);
+  const sharePlaceToChat = useRoomStore((s) => s.sharePlaceToChat);
 
   const isNavigating = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
   const isInRoom = uiState === 'InRoom' || uiState === 'InRoomNavigating' || uiState === 'InRoomGetDirections';
@@ -74,7 +75,18 @@ export function PlaceTab() {
       secondaryButton = (
         <TouchableOpacity
           className="flex-1 bg-secondary py-3 rounded-xl flex-row items-center justify-center"
-          onPress={() => Alert.alert('Todo', 'Share to Chat coming soon')}
+          onPress={() => {
+            if (!selectedPlace) {
+              return;
+            }
+
+            void (async () => {
+              const shared = await sharePlaceToChat(selectedPlace);
+              if (shared) {
+                setActiveTab('Chat');
+              }
+            })();
+          }}
         >
           <Share2 color="#fff" size={20} className="mr-2" />
           <Text className="text-foreground font-semibold">Share to Chat</Text>

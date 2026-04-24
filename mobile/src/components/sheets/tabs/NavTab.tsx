@@ -109,6 +109,23 @@ export function NavTab() {
     }
   };
 
+  if (!isNavSessionActive) {
+    return (
+      <View className="flex-1 px-4 py-4">
+        <View className="bg-secondary rounded-xl border border-border p-4">
+          <Text className="text-foreground font-semibold mb-1">No active navigation</Text>
+          <Text className="text-muted text-sm">Navigation session has ended.</Text>
+          <TouchableOpacity
+            className="mt-3 bg-primary rounded-xl py-2.5 items-center"
+            onPress={() => endNavSession(isInRoom ? 'InRoom' : 'Home')}
+          >
+            <Text className="text-white font-semibold">Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View className="flex-1 px-4 py-2">
       {/* ETA + End row */}

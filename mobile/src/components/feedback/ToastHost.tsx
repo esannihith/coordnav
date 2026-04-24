@@ -10,18 +10,18 @@ const VARIANT_STYLES: Record<
   { backgroundColor: string; borderColor: string; dotColor: string }
 > = {
   success: {
-    backgroundColor: 'rgba(16, 185, 129, 0.16)',
-    borderColor: 'rgba(16, 185, 129, 0.45)',
+    backgroundColor: '#14532d',
+    borderColor: '#166534',
     dotColor: '#34d399',
   },
   error: {
-    backgroundColor: 'rgba(239, 68, 68, 0.16)',
-    borderColor: 'rgba(239, 68, 68, 0.45)',
+    backgroundColor: '#7f1d1d',
+    borderColor: '#991b1b',
     dotColor: '#f87171',
   },
   info: {
-    backgroundColor: 'rgba(59, 130, 246, 0.16)',
-    borderColor: 'rgba(59, 130, 246, 0.45)',
+    backgroundColor: '#1e3a8a',
+    borderColor: '#1d4ed8',
     dotColor: '#60a5fa',
   },
 };
@@ -107,12 +107,12 @@ const styles = StyleSheet.create({
     zIndex: 3000,
   },
   toastCard: {
-    minHeight: 62,
+    minHeight: 38,
     borderWidth: 1,
-    borderRadius: 16,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderRadius: 11,
+    marginBottom: 5,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
     flexDirection: 'row',
     alignItems: 'center',
   },
@@ -127,20 +127,20 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   title: {
-    color: '#f5f5f5',
+    color: '#fafafa',
     fontWeight: '700',
-    fontSize: 13,
-    marginBottom: 2,
+    fontSize: 11,
+    marginBottom: 0,
   },
   message: {
-    color: '#d4d4d8',
-    fontSize: 12,
-    lineHeight: 17,
+    color: '#e5e7eb',
+    fontSize: 10,
+    lineHeight: 13,
   },
   close: {
-    color: '#d4d4d8',
-    fontSize: 22,
-    lineHeight: 22,
-    paddingBottom: 2,
+    color: '#e5e7eb',
+    fontSize: 14,
+    lineHeight: 14,
+    paddingBottom: 0,
   },
 });

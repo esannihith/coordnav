@@ -9,19 +9,18 @@ import {
   getDoc,
   getDocs,
   getFirestore,
-  limit,
+  limitToLast,
   onSnapshot,
   orderBy,
   query,
   runTransaction,
   serverTimestamp,
   setDoc,
-  updateDoc,
-  writeBatch,
 } from '@react-native-firebase/firestore';
 
 const ROOM_COLLECTION = 'rooms';
 const MEMBER_SUBCOLLECTION = 'liveLocations';
+const CHAT_SUBCOLLECTION = 'messages';
 
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const ROOM_CODE_LENGTH = 6;
@@ -31,6 +30,7 @@ const app = getApp();
 const db = getFirestore(app);
 
 export const ROOM_MEMBER_STALE_MS = 2 * 60 * 1000;
+export const ROOM_CHAT_LIMIT = 100;
 
 export type RoomServiceErrorCode =
   | 'ROOM_NOT_FOUND'
@@ -82,6 +82,49 @@ export interface RoomSnapshot {
   createdAtMs: number | null;
 }
 
+export type ChatMessageType = 'text' | 'place';
+
+export interface ChatPlacePayload {
+  id: string;
+  name: string;
+  address: string;
+  lat?: number | null;
+  lng?: number | null;
+}
+
+interface ChatMessageDocBase {
+  type: ChatMessageType;
+  senderUid: string;
+  senderName: string;
+  senderPhotoURL?: string | null;
+  createdAt: FirebaseFirestoreTypes.Timestamp | null;
+  createdAtMs: number;
+}
+
+interface ChatTextMessageDoc extends ChatMessageDocBase {
+  type: 'text';
+  text: string;
+}
+
+interface ChatPlaceMessageDoc extends ChatMessageDocBase {
+  type: 'place';
+  place: ChatPlacePayload;
+}
+
+type ChatMessageDoc = ChatTextMessageDoc | ChatPlaceMessageDoc;
+
+export interface ChatMessage {
+  id: string;
+  roomCode: string;
+  type: ChatMessageType;
+  senderUid: string;
+  senderName: string;
+  senderPhotoURL?: string | null;
+  createdAtMs: number;
+  text?: string;
+  place?: ChatPlacePayload;
+}
+
 interface RoomCreateResult {
   roomCode: string;
   roomName: string;
@@ -93,6 +136,10 @@ function roomRef(roomCode: string) {
 
 function memberRef(roomCode: string, uid: string) {
   return doc(db, ROOM_COLLECTION, roomCode, MEMBER_SUBCOLLECTION, uid);
+}
+
+function chatCollectionRef(roomCode: string) {
+  return collection(roomRef(roomCode), CHAT_SUBCOLLECTION);
 }
 
 function normalizeDisplayName(user: FirebaseAuthTypes.User): string {
@@ -150,6 +197,59 @@ function toMemberSnapshot(snapshot: FirebaseFirestoreTypes.QueryDocumentSnapshot
   };
 }
 
+function toChatSnapshot(
+  roomCode: string,
+  snapshot: FirebaseFirestoreTypes.QueryDocumentSnapshot
+): ChatMessage {
+  const data = snapshot.data() as ChatMessageDoc;
+  const createdAtMs =
+    typeof data.createdAtMs === 'number'
+      ? data.createdAtMs
+      : data.createdAt?.toMillis?.() ?? Date.now();
+
+  const base: ChatMessage = {
+    id: snapshot.id,
+    roomCode,
+    type: data.type === 'place' ? 'place' : 'text',
+    senderUid: data.senderUid || 'unknown',
+    senderName: data.senderName || 'Member',
+    senderPhotoURL: data.senderPhotoURL ?? null,
+    createdAtMs,
+  };
+
+  if (data.type === 'place' && data.place) {
+    return {
+      ...base,
+      type: 'place',
+      place: {
+        id: data.place.id,
+        name: data.place.name,
+        address: data.place.address,
+        lat: data.place.lat ?? null,
+        lng: data.place.lng ?? null,
+      },
+    };
+  }
+
+  return {
+    ...base,
+    type: 'text',
+    text: (data as ChatTextMessageDoc).text || '',
+  };
+}
+
+function getNextOwnerUid(
+  memberDocs: FirebaseFirestoreTypes.QueryDocumentSnapshot[],
+  leavingUid: string
+): string | null {
+  for (const memberDoc of memberDocs) {
+    if (memberDoc.id !== leavingUid) {
+      return memberDoc.id;
+    }
+  }
+  return null;
+}
+
 async function ensureRoomActive(roomCode: string): Promise<RoomSnapshot> {
   const snapshot = await getDoc(roomRef(roomCode));
   if (!snapshot.exists()) {
@@ -162,18 +262,6 @@ async function ensureRoomActive(roomCode: string): Promise<RoomSnapshot> {
   }
 
   return toRoomSnapshot(roomCode, data);
-}
-
-async function cleanupRoomIfEmpty(roomCode: string): Promise<void> {
-  const membersQuery = query(
-    collection(roomRef(roomCode), MEMBER_SUBCOLLECTION),
-    limit(1)
-  );
-  const membersSnap = await getDocs(membersQuery);
-
-  if (membersSnap.empty) {
-    await deleteDoc(roomRef(roomCode));
-  }
 }
 
 export const roomService = {
@@ -257,30 +345,35 @@ export const roomService = {
     if (!roomCode) return;
 
     const roomDocRef = roomRef(roomCode);
-    await deleteDoc(memberRef(roomCode, uid)).catch(() => undefined);
+    const leavingMemberRef = memberRef(roomCode, uid);
 
     const roomSnap = await getDoc(roomDocRef);
     if (!roomSnap.exists()) {
+      await deleteDoc(leavingMemberRef).catch(() => undefined);
       return;
     }
 
     const roomData = roomSnap.data() as RoomDoc;
-
-    // Owner handoff: oldest joined active member becomes next owner.
     if (roomData.ownerUid === uid) {
-      const nextOwnerQuery = query(
-        collection(roomDocRef, MEMBER_SUBCOLLECTION),
-        orderBy('joinedAt', 'asc'),
-        limit(1)
+      const membersSnap = await getDocs(
+        query(collection(roomDocRef, MEMBER_SUBCOLLECTION), orderBy('joinedAt', 'asc'))
       );
-      const nextOwnerSnap = await getDocs(nextOwnerQuery);
+      const nextOwnerUid = getNextOwnerUid(membersSnap.docs, uid);
 
-      if (!nextOwnerSnap.empty) {
-        await updateDoc(roomDocRef, { ownerUid: nextOwnerSnap.docs[0].id });
+      if (nextOwnerUid) {
+        // Transfer owner first while requester is still owner.
+        await setDoc(roomDocRef, { ownerUid: nextOwnerUid }, { merge: true });
+        // Then remove current owner membership (self-delete is always allowed by rules).
+        await deleteDoc(leavingMemberRef);
+      } else {
+        // Last member/owner leaving: delete own member doc, then room.
+        await deleteDoc(leavingMemberRef);
+        await deleteDoc(roomDocRef);
       }
+      return;
     }
 
-    await cleanupRoomIfEmpty(roomCode);
+    await deleteDoc(leavingMemberRef);
   },
 
   async endRoom(roomCodeInput: string, ownerUid: string): Promise<void> {
@@ -297,13 +390,13 @@ export const roomService = {
       throw new Error('Only the room owner can end the room.');
     }
 
+    // Delete all member docs first, then delete the room doc.
+    // This avoids cross-document rule coupling when room and member docs are deleted together.
     const membersSnap = await getDocs(collection(roomDocRef, MEMBER_SUBCOLLECTION));
-    const batch = writeBatch(db);
-
-    membersSnap.docs.forEach((snapshot) => batch.delete(snapshot.ref));
-    batch.delete(roomDocRef);
-
-    await batch.commit();
+    for (const snapshot of membersSnap.docs) {
+      await deleteDoc(snapshot.ref);
+    }
+    await deleteDoc(roomDocRef);
   },
 
   async setSharing(roomCodeInput: string, uid: string, isSharing: boolean): Promise<void> {
@@ -333,6 +426,60 @@ export const roomService = {
       },
       { merge: true }
     );
+  },
+
+  async sendTextMessage(
+    roomCodeInput: string,
+    user: FirebaseAuthTypes.User,
+    textInput: string
+  ): Promise<void> {
+    const roomCode = normalizeRoomCode(roomCodeInput);
+    const text = textInput.trim();
+
+    if (!roomCode || !text) {
+      return;
+    }
+
+    const messageRef = doc(chatCollectionRef(roomCode));
+
+    await setDoc(messageRef, {
+      type: 'text',
+      senderUid: user.uid,
+      senderName: normalizeDisplayName(user),
+      senderPhotoURL: user.photoURL ?? null,
+      text,
+      createdAt: serverTimestamp(),
+      createdAtMs: Date.now(),
+    });
+  },
+
+  async sendPlaceMessage(
+    roomCodeInput: string,
+    user: FirebaseAuthTypes.User,
+    place: ChatPlacePayload
+  ): Promise<void> {
+    const roomCode = normalizeRoomCode(roomCodeInput);
+    if (!roomCode) {
+      return;
+    }
+
+    const messageRef = doc(chatCollectionRef(roomCode));
+
+    await setDoc(messageRef, {
+      type: 'place',
+      senderUid: user.uid,
+      senderName: normalizeDisplayName(user),
+      senderPhotoURL: user.photoURL ?? null,
+      place: {
+        id: place.id,
+        name: place.name,
+        address: place.address,
+        lat: place.lat ?? null,
+        lng: place.lng ?? null,
+      },
+      createdAt: serverTimestamp(),
+      createdAtMs: Date.now(),
+    });
   },
 
   subscribeRoom(
@@ -381,6 +528,31 @@ export const roomService = {
       (snapshot) => {
         const members = snapshot.docs.map(toMemberSnapshot);
         onChange(members);
+      },
+      (error) => {
+        onError?.(error as Error);
+      }
+    );
+  },
+
+  subscribeMessages(
+    roomCodeInput: string,
+    onChange: (messages: ChatMessage[]) => void,
+    onError?: (error: Error) => void
+  ): () => void {
+    const roomCode = normalizeRoomCode(roomCodeInput);
+
+    const messagesQuery = query(
+      chatCollectionRef(roomCode),
+      orderBy('createdAtMs', 'asc'),
+      limitToLast(ROOM_CHAT_LIMIT)
+    );
+
+    return onSnapshot(
+      messagesQuery,
+      (snapshot) => {
+        const messages = snapshot.docs.map((docSnapshot) => toChatSnapshot(roomCode, docSnapshot));
+        onChange(messages);
       },
       (error) => {
         onError?.(error as Error);

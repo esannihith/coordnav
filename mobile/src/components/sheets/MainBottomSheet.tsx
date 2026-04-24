@@ -48,6 +48,14 @@ export function MainBottomSheet() {
 
   const effectiveUiState = useMemo(() => {
     const navState = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
+    if (uiState === 'InRoomNavigating' && !isInRoom && isNavSessionActive) {
+      return 'NavigatingSolo';
+    }
+
+    if (uiState === 'InRoomGetDirections' && !isInRoom) {
+      return 'GetDirections';
+    }
+
     if (navState && !isNavSessionActive) {
       return isInRoom ? 'InRoom' : 'Home';
     }

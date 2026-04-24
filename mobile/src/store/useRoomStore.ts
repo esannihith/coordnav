@@ -2,9 +2,11 @@ import { create } from 'zustand';
 import * as Location from 'expo-location';
 import { AppState, AppStateStatus, NativeEventSubscription } from 'react-native';
 import { useAuthStore } from './useAuthStore';
-import { useAppStore } from './useAppStore';
+import { useAppStore, type PlaceData } from './useAppStore';
 import { useToastStore } from './useToastStore';
 import {
+  type ChatMessage,
+  type ChatPlacePayload,
   formatRoomError,
   normalizeRoomCode,
   roomService,
@@ -21,9 +23,12 @@ interface RoomStoreState {
   isInRoom: boolean;
   isOwner: boolean;
   members: RoomMember[];
+  messages: ChatMessage[];
 
   actionState: RoomActionState;
   error: string | null;
+  chatError: string | null;
+  isSendingMessage: boolean;
 
   isSharing: boolean;
   shareIntentOn: boolean;
@@ -31,6 +36,7 @@ interface RoomStoreState {
 
   roomUnsubscribe: (() => void) | null;
   membersUnsubscribe: (() => void) | null;
+  messagesUnsubscribe: (() => void) | null;
   locationSubscription: Location.LocationSubscription | null;
   appStateSubscription: NativeEventSubscription | null;
 
@@ -42,6 +48,10 @@ interface RoomStoreState {
 
   startListeners: (roomCode: string) => void;
   stopListeners: () => void;
+  startChatListener: (roomCode: string) => void;
+  stopChatListener: () => void;
+  sendChatText: (text: string) => Promise<boolean>;
+  sharePlaceToChat: (placeData: PlaceData) => Promise<boolean>;
   clearRoomState: () => Promise<void>;
 
   setError: (message: string | null) => void;
@@ -62,12 +72,31 @@ function requireAuthUser() {
   return user;
 }
 
+function isPermissionDeniedError(error: unknown): boolean {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  return /permission[_\s-]?denied/i.test(error.message);
+}
+
 function enterRoomUi() {
   useAppStore.getState().setUiStateAndTab('InRoom', 'Room');
 }
 
 function exitRoomUi() {
-  useAppStore.getState().endNavSession('Home');
+  const appStore = useAppStore.getState();
+
+  if (appStore.isNavSessionActive) {
+    appStore.setUiStateAndTab('NavigatingSolo', 'Nav');
+    return;
+  }
+
+  if (appStore.uiState === 'InRoomGetDirections') {
+    appStore.setUiStateAndTab('GetDirections', 'Directions');
+    return;
+  }
+
+  appStore.setUiStateAndTab('Home', 'Search');
 }
 
 function initialRoomState() {
@@ -78,13 +107,17 @@ function initialRoomState() {
     isInRoom: false,
     isOwner: false,
     members: [] as RoomMember[],
+    messages: [] as ChatMessage[],
     actionState: 'idle' as RoomActionState,
     error: null as string | null,
+    chatError: null as string | null,
+    isSendingMessage: false,
     isSharing: false,
     shareIntentOn: false,
     shareStatus: 'off' as ShareStatus,
     roomUnsubscribe: null as (() => void) | null,
     membersUnsubscribe: null as (() => void) | null,
+    messagesUnsubscribe: null as (() => void) | null,
     locationSubscription: null as Location.LocationSubscription | null,
     appStateSubscription: null as NativeEventSubscription | null,
   };
@@ -283,13 +316,132 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
     );
 
     set({ roomUnsubscribe, membersUnsubscribe });
+    get().startChatListener(roomCode);
   },
 
   stopListeners: () => {
     const state = get();
     state.roomUnsubscribe?.();
     state.membersUnsubscribe?.();
-    set({ roomUnsubscribe: null, membersUnsubscribe: null });
+    state.messagesUnsubscribe?.();
+    set({
+      roomUnsubscribe: null,
+      membersUnsubscribe: null,
+      messagesUnsubscribe: null,
+      messages: [],
+      chatError: null,
+      isSendingMessage: false,
+    });
+  },
+
+  startChatListener: (roomCodeInput) => {
+    const roomCode = normalizeRoomCode(roomCodeInput);
+    if (!roomCode) {
+      return;
+    }
+
+    get().stopChatListener();
+
+    const messagesUnsubscribe = roomService.subscribeMessages(
+      roomCode,
+      (messages) => {
+        set({ messages, chatError: null });
+      },
+      (error) => {
+        set({ chatError: formatRoomError(error) });
+      }
+    );
+
+    set({ messagesUnsubscribe });
+  },
+
+  stopChatListener: () => {
+    const state = get();
+    state.messagesUnsubscribe?.();
+    set({
+      messagesUnsubscribe: null,
+      messages: [],
+      chatError: null,
+      isSendingMessage: false,
+    });
+  },
+
+  sendChatText: async (textInput) => {
+    const state = get();
+    if (state.isSendingMessage) {
+      return false;
+    }
+
+    const text = textInput.trim();
+    if (!text || !state.currentRoomCode || !state.isInRoom) {
+      return false;
+    }
+
+    const user = useAuthStore.getState().user;
+    if (!user) {
+      set({ chatError: 'Please sign in to send messages.' });
+      useToastStore.getState().error('Please sign in to send messages.');
+      return false;
+    }
+
+    set({ isSendingMessage: true, chatError: null });
+
+    try {
+      await roomService.sendTextMessage(state.currentRoomCode, user, text);
+      set({ isSendingMessage: false });
+      return true;
+    } catch (error) {
+      const message = formatRoomError(error);
+      set({ isSendingMessage: false, chatError: message });
+      useToastStore.getState().error(message, { title: 'Chat Send Failed' });
+      return false;
+    }
+  },
+
+  sharePlaceToChat: async (placeData) => {
+    const state = get();
+    if (state.isSendingMessage) {
+      return false;
+    }
+
+    if (!state.currentRoomCode || !state.isInRoom) {
+      return false;
+    }
+
+    const user = useAuthStore.getState().user;
+    if (!user) {
+      set({ chatError: 'Please sign in to share places.' });
+      useToastStore.getState().error('Please sign in to share places.');
+      return false;
+    }
+
+    if (!placeData?.id) {
+      set({ chatError: 'Could not share this place.' });
+      useToastStore.getState().error('Could not share this place.', { title: 'Share Failed' });
+      return false;
+    }
+
+    const payload: ChatPlacePayload = {
+      id: placeData.id,
+      name: placeData.displayName?.text || placeData.name || 'Shared Place',
+      address: placeData.formattedAddress || 'No address',
+      lat: placeData.location?.lat ?? null,
+      lng: placeData.location?.lng ?? null,
+    };
+
+    set({ isSendingMessage: true, chatError: null });
+
+    try {
+      await roomService.sendPlaceMessage(state.currentRoomCode, user, payload);
+      set({ isSendingMessage: false });
+      useToastStore.getState().success('Place shared to chat.', { title: 'Shared' });
+      return true;
+    } catch (error) {
+      const message = formatRoomError(error);
+      set({ isSendingMessage: false, chatError: message });
+      useToastStore.getState().error(message, { title: 'Share Failed' });
+      return false;
+    }
   },
 
   _handleRoomClosed: async (reason) => {
@@ -339,7 +491,9 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
         isOwner: true,
         isInRoom: true,
         members: [],
+        messages: [],
         error: null,
+        chatError: null,
       });
 
       get()._ensureAppStateListener();
@@ -384,7 +538,9 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
         isOwner: joinedRoom.ownerUid === user.uid,
         isInRoom: true,
         members: [],
+        messages: [],
         error: null,
+        chatError: null,
       });
 
       get()._ensureAppStateListener();
@@ -429,6 +585,21 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
       exitRoomUi();
       useToastStore.getState().info('You left the room.');
     } catch (error) {
+      if (isPermissionDeniedError(error)) {
+        state.stopListeners();
+        state._removeAppStateListener();
+        set({
+          ...initialRoomState(),
+          error: 'Firestore permission denied. Local room state was reset.',
+        });
+        exitRoomUi();
+        useToastStore.getState().error(
+          'Firestore permission denied. Publish latest Firestore rules and try again.',
+          { title: 'Rules Update Needed' }
+        );
+        return;
+      }
+
       set({
         actionState: 'idle',
         error: formatRoomError(error),
@@ -460,6 +631,21 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
       exitRoomUi();
       useToastStore.getState().info('Room ended for everyone.', { title: 'Room Ended' });
     } catch (error) {
+      if (isPermissionDeniedError(error)) {
+        state.stopListeners();
+        state._removeAppStateListener();
+        set({
+          ...initialRoomState(),
+          error: 'Firestore permission denied. Local room state was reset.',
+        });
+        exitRoomUi();
+        useToastStore.getState().error(
+          'Firestore permission denied. Publish latest Firestore rules and try again.',
+          { title: 'Rules Update Needed' }
+        );
+        return;
+      }
+
       set({
         actionState: 'idle',
         error: formatRoomError(error),

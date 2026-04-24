@@ -16,7 +16,7 @@ Last updated: 2026-04-25
 - Leave room.
 - Owner handoff on owner leave (next earliest joined member becomes owner).
 - Owner-only end room (deletes room + all member docs).
-- Auto-delete empty room after last member leaves.
+- Last owner leaving with no successor deletes the room.
 
 ### 3) Realtime sync
 - Realtime listener for room document status.
@@ -49,14 +49,23 @@ Last updated: 2026-04-25
 
 ### 7) Firestore API modernization
 - `roomService` migrated to RNFirebase modular API (v22+ style):
-  - `getFirestore`, `collection`, `doc`, `query`, `runTransaction`, `setDoc`, `updateDoc`, `deleteDoc`, `writeBatch`, `onSnapshot`, `serverTimestamp`, `GeoPoint`.
+  - `getFirestore`, `collection`, `doc`, `query`, `runTransaction`, `setDoc`, `deleteDoc`, `onSnapshot`, `serverTimestamp`, `GeoPoint`.
 - This removes namespaced Firestore deprecation warnings produced by `firestore().*` usage.
+
+### 8) Chat + share-to-chat
+- Room chat collection implemented at `rooms/{roomCode}/messages`.
+- Realtime room-scoped message stream in Chat tab (latest 100 messages).
+- Supports:
+  - text messages,
+  - place-share messages (from Place tab `Share to Chat` action).
+- `Share to Chat` now sends instantly and switches to Chat tab.
 
 ## Known limitations
 - No background location task (`expo-task-manager`) yet.
 - No auto-rejoin on cold app start.
-- Chat is not implemented yet.
 - No cloud function-based cleanup/presence reconciliation.
+- Chat is MVP only (no pagination/read receipts/edit-delete/replies/push).
+- Firestore rules must be published from `mobile/firestore.rules` for owner leave/end flows to work.
 
 ## TODOs (prioritized)
 
@@ -71,10 +80,10 @@ Last updated: 2026-04-25
 - Add per-member details on marker tap (name, last update, sharing state).
 - Add "owner transferred" UX message when ownership changes.
 
-### P1: Chat integration
-- Implement room chat collection and message stream.
-- Add send/receive with optimistic UI + timestamp formatting.
-- Add "share place to chat" action from Place tab.
+### P1: Chat enhancements
+- Add message pagination / load older history.
+- Add delivery/read indicators and optional typing state.
+- Add richer place share cards with deep-link/open actions.
 
 ### P2: Location enhancement
 - Implement background sharing with `expo-task-manager` and foreground service notification.

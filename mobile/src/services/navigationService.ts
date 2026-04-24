@@ -32,9 +32,9 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function isNavigatorInitialized(controller: NavigationControllerLike): Promise<boolean> {
+async function isNavigatorInitialized(controller: NavigationControllerLike): Promise<boolean | null> {
   if (typeof controller.isInitialized !== 'function') {
-    return true;
+    return null;
   }
 
   try {
@@ -49,7 +49,8 @@ export async function waitForNavigatorReady(
   timeoutMs = NAV_READY_TIMEOUT_MS
 ): Promise<boolean> {
   const controller = navigationController as NavigationControllerLike;
-  if (await isNavigatorInitialized(controller)) {
+  const initState = await isNavigatorInitialized(controller);
+  if (initState === true) {
     return true;
   }
 
@@ -78,9 +79,15 @@ export async function waitForNavigatorReady(
     });
   }
 
+  if (initState === null) {
+    // No readiness signals available in this SDK shape; best-effort proceed.
+    return true;
+  }
+
   const startedAt = Date.now();
   while (Date.now() - startedAt < timeoutMs) {
-    if (await isNavigatorInitialized(controller)) {
+    const state = await isNavigatorInitialized(controller);
+    if (state === true || state === null) {
       return true;
     }
     await sleep(NAV_READY_POLL_MS);
@@ -109,6 +116,13 @@ async function safeNavCall(label: string, fn: (() => Promise<void>) | undefined)
   try {
     await fn();
   } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const notReady =
+      message.toLowerCase().includes('initialize navigator') ||
+      message.toLowerCase().includes('navigator is not ready');
+    if (notReady) {
+      return;
+    }
     console.warn(`[NavService] ${label} failed:`, error);
   }
 }
@@ -241,13 +255,12 @@ export async function stopNavigation(
  */
 export async function resetNativeNavigationSession(
   navigationController: NavigationController
-): Promise<void> {
+): Promise<boolean> {
   const controller = navigationController as NavigationControllerLike;
   const ready = await waitForNavigatorReady(navigationController);
 
   if (!ready) {
-    console.log('[NavService] Skip reset: navigator not ready yet');
-    return;
+    return false;
   }
 
   const guidanceRunning = await readGuidanceState(controller);
@@ -256,5 +269,5 @@ export async function resetNativeNavigationSession(
   }
 
   await safeNavCall('clearDestinations', controller.clearDestinations?.bind(controller));
-  console.log('[NavService] Navigation session reset');
+  return true;
 }
