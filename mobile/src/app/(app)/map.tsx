@@ -10,7 +10,7 @@ function DevMenu() {
   const { uiState, setUiState } = useAppStore();
   const states: UIState[] = [
     'Home', 'PlaceSearch', 'GetDirections', 'RouteSelection', 
-    'NavigatingSolo', 'InRoom', 'InRoomNavigating'
+    'NavigatingSolo', 'InRoom', 'InRoomNavigating', 'InRoomGetDirections'
   ];
 
   if (!isOpen) {
@@ -56,13 +56,13 @@ export default function App() {
         termsAndConditionsDialogOptions={{
           title: 'TripRoom Terms',
           companyName: 'TripRoom',
-          showOnlyDisclaimer: false,
+          showOnlyDisclaimer: true,
         }}
         taskRemovedBehavior={TaskRemovedBehavior.CONTINUE_SERVICE}
       >
         <View className="flex-1 bg-black">
           <MapLayout />
-          <DevMenu />
+          {/* <DevMenu /> */}
         </View>
       </NavigationProvider>
     </SafeAreaProvider>

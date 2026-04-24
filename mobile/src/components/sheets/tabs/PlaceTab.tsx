@@ -1,20 +1,103 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, ScrollView, Alert } from 'react-native';
-import { Navigation, Star, Users } from 'lucide-react-native';
+import { Navigation, Star, Users, MapPinPlus, Share2 } from 'lucide-react-native';
 import * as Location from 'expo-location';
 import { useAppStore } from '../../../store/useAppStore';
 
 export function PlaceTab() {
-  const { selectedPlace, setUiState, setActiveTab } = useAppStore();
+  const { selectedPlace, setUiState, setActiveTab, uiState, roomCode, setUiStateAndTab } = useAppStore();
+
+  const isNavigating = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
+  const isInRoom = uiState === 'InRoom' || uiState === 'InRoomNavigating' || uiState === 'InRoomGetDirections';
 
   const handleDirections = async () => {
     try {
       await Location.enableNetworkProviderAsync();
-      setUiState('GetDirections');
+      if (roomCode) {
+        setUiState('InRoomGetDirections');
+      } else {
+        setUiState('GetDirections');
+      }
       setActiveTab('Directions');
     } catch (e) {
       Alert.alert('Location required', 'Please enable location services to get directions.');
     }
+  };
+
+  const handleCreateRoom = () => {
+    if (isNavigating) {
+      Alert.alert(
+        'Exit navigation?',
+        'Creating a room will end your current navigation session.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Exit & Create',
+            style: 'destructive',
+            onPress: () => setUiStateAndTab('Home', 'Room', true),
+          },
+        ]
+      );
+    } else {
+      setUiState('Home');
+      setActiveTab('Room');
+    }
+  };
+
+  const renderActions = () => {
+    // ── Primary action ──
+    const primaryButton = isNavigating ? (
+      <TouchableOpacity
+        className="flex-1 bg-green-600 py-3 rounded-xl flex-row items-center justify-center"
+        onPress={() => Alert.alert('Todo', 'Add stop functionality coming soon')}
+      >
+        <MapPinPlus color="#fff" size={20} className="mr-2" />
+        <Text className="text-white font-semibold">Add Stop</Text>
+      </TouchableOpacity>
+    ) : (
+      <TouchableOpacity
+        className="flex-1 bg-primary py-3 rounded-xl flex-row items-center justify-center"
+        onPress={handleDirections}
+      >
+        <Navigation color="#fff" size={20} className="mr-2" />
+        <Text className="text-primary-foreground font-semibold">Directions</Text>
+      </TouchableOpacity>
+    );
+
+    // ── Secondary action (context-dependent) ──
+    let secondaryButton = null;
+
+    if (isInRoom) {
+      // In any room state → Share to Chat
+      secondaryButton = (
+        <TouchableOpacity
+          className="flex-1 bg-secondary py-3 rounded-xl flex-row items-center justify-center"
+          onPress={() => Alert.alert('Todo', 'Share to Chat coming soon')}
+        >
+          <Share2 color="#fff" size={20} className="mr-2" />
+          <Text className="text-foreground font-semibold">Share to Chat</Text>
+        </TouchableOpacity>
+      );
+    } else if (!isNavigating) {
+      // Solo, not navigating → Create Room
+      secondaryButton = (
+        <TouchableOpacity
+          className="flex-1 bg-secondary py-3 rounded-xl flex-row items-center justify-center"
+          onPress={handleCreateRoom}
+        >
+          <Users color="#fff" size={20} className="mr-2" />
+          <Text className="text-foreground font-semibold">Create Room</Text>
+        </TouchableOpacity>
+      );
+    }
+    // Solo + navigating → no secondary button (avoid accidental nav exit)
+
+    return (
+      <View className="flex-row gap-4 mb-6">
+        {primaryButton}
+        {secondaryButton}
+      </View>
+    );
   };
 
   if (!selectedPlace) {
@@ -50,30 +133,7 @@ export function PlaceTab() {
         </Text>
       </View>
 
-      <View className="flex-row gap-4 mb-6">
-        <TouchableOpacity 
-          className="flex-1 bg-primary py-3 rounded-xl flex-row items-center justify-center"
-          onPress={() => {
-            setUiState('GetDirections');
-            setActiveTab('Directions');
-          }}
-        >
-          <Navigation color="#fff" size={20} className="mr-2" />
-          <Text className="text-primary-foreground font-semibold">Directions</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity 
-          className="flex-1 bg-secondary py-3 rounded-xl flex-row items-center justify-center"
-          onPress={() => {
-            // Future: Implement create room flow with this place as destination
-            setUiState('Home');
-            setActiveTab('Room');
-          }}
-        >
-          <Users color="#fff" size={20} className="mr-2" />
-          <Text className="text-foreground font-semibold">Create Room</Text>
-        </TouchableOpacity>
-      </View>
+      {renderActions()}
     </ScrollView>
   );
 }

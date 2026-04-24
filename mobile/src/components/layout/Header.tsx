@@ -9,31 +9,17 @@ import { cn } from '../../lib/utils';
 export function Header() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { uiState, roomCode, roomName, leaveRoom } = useAppStore();
-
-  const isRoomMode = uiState === 'InRoom' || uiState === 'InRoomNavigating';
-  const title = isRoomMode ? (roomName || `Room #${roomCode || '000'}`) : 'TripRoom';
 
   return (
     <View 
       className={cn(
         "px-4 pb-4 pt-2 flex-row items-center justify-between pointer-events-auto",
-        "bg-background/80" // Glassmorphism-ish translucent dark
+        "bg-background/80"
       )}
       style={{ paddingTop: Math.max(insets.top, 16) }}
     >
       <View className="flex-row items-center flex-1">
-        {isRoomMode && (
-          <TouchableOpacity onPress={leaveRoom} className="mr-3">
-            <ChevronLeft color="#fff" size={24} />
-          </TouchableOpacity>
-        )}
-        <Text className="text-xl font-bold text-foreground">{title}</Text>
-        {isRoomMode && (
-          <View className="ml-3 px-2 py-1 rounded-full bg-green-500/20">
-            <Text className="text-xs text-green-400 font-medium">3 online</Text>
-          </View>
-        )}
+        <Text className="text-2xl font-black text-foreground tracking-tight">CoordNav</Text>
       </View>
 
       <TouchableOpacity 

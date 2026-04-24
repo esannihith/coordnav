@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Keyboard } from 'react-native';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Search as SearchIcon, MapPin, Navigation } from 'lucide-react-native';
@@ -9,10 +9,40 @@ export function SearchTab() {
   const { 
     setUiState, setActiveTab, setSelectedPlace, 
     searchQuery, setSearchQuery, 
-    searchResults, setSearchResults 
+    searchResults, setSearchResults,
+    uiState, activeTab
   } = useAppStore();
 
   const [isLoading, setIsLoading] = React.useState(false);
+
+  // Track whether user is returning from Place Details (back navigation)
+  // vs. opening Search tab fresh (tab switch from Room/Chat/etc.)
+  const isReturningFromPlace = useRef(false);
+  const prevActiveTab = useRef<string>(activeTab);
+
+  useEffect(() => {
+    const prev = prevActiveTab.current;
+    prevActiveTab.current = activeTab;
+
+    if (activeTab !== 'Search') {
+      // User left the Search tab
+      if (activeTab === 'Place') {
+        // Navigated into Place Details — mark as "returning" context
+        isReturningFromPlace.current = true;
+      }
+      return;
+    }
+
+    // We just landed on Search tab
+    if (isReturningFromPlace.current) {
+      // Returning from Place Details → keep query + results intact
+      isReturningFromPlace.current = false;
+    } else if (prev !== 'Search') {
+      // Fresh open from a different tab (Room, Chat, People, Nav, etc.) → clear
+      setSearchQuery('');
+      setSearchResults([]);
+    }
+  }, [activeTab, setSearchQuery, setSearchResults]);
 
   // Debounced search logic
   useEffect(() => {
@@ -38,8 +68,12 @@ export function SearchTab() {
     
     if (details) {
       setSelectedPlace(details);
-      setUiState('PlaceSearch');
-      setActiveTab('Place');
+      if (uiState === 'InRoom' || uiState === 'InRoomNavigating' || uiState === 'NavigatingSolo') {
+        setActiveTab('Place');
+      } else {
+        setUiState('PlaceSearch');
+        setActiveTab('Place');
+      }
     } else {
       // Graceful fallback if error occurs
       alert("Could not load place details.");

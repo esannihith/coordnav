@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Keyboard } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import { useAppStore, BottomSheetTab } from '../../store/useAppStore';
 import { cn } from '../../lib/utils';
@@ -8,62 +8,71 @@ import { cn } from '../../lib/utils';
 import { RoomTab } from './tabs/RoomTab';
 import { SearchTab } from './tabs/SearchTab';
 import { ChatTab } from './tabs/ChatTab';
-import { PeopleTab } from './tabs/PeopleTab';
 import { DirectionsTab } from './tabs/DirectionsTab';
 import { PlaceTab } from './tabs/PlaceTab';
+import { NavTab } from './tabs/NavTab';
+
+// ── Tab & snap config driven by uiState ──
+const TAB_CONFIG: Record<string, { tabs: BottomSheetTab[], tabsWithPlace: BottomSheetTab[], snap: string[], defaultIndex: number }> = {
+  Home: { tabs: ['Room', 'Search'], tabsWithPlace: ['Room', 'Search'], snap: ['10%', '45%', '85%'], defaultIndex: 1 },
+  PlaceSearch: { tabs: ['Room', 'Search'], tabsWithPlace: ['Room', 'Place'], snap: ['10%', '45%', '85%'], defaultIndex: 1 },
+  GetDirections: { tabs: ['Directions'], tabsWithPlace: ['Directions'], snap: ['10%', '40%'], defaultIndex: 1 },
+  RouteSelection: { tabs: ['Directions'], tabsWithPlace: ['Directions'], snap: ['10%', '40%'], defaultIndex: 1 },
+  InRoomGetDirections: { tabs: ['Room', 'Chat', 'Directions'], tabsWithPlace: ['Room', 'Chat', 'Directions'], snap: ['15%', '40%', '85%'], defaultIndex: 1 },
+  NavigatingSolo: { tabs: ['Nav', 'Search'], tabsWithPlace: ['Nav', 'Place'], snap: ['15%', '45%', '75%'], defaultIndex: 0 },
+  InRoom: { tabs: ['Room', 'Chat', 'Search'], tabsWithPlace: ['Room', 'Chat', 'Place'], snap: ['10%', '40%', '85%'], defaultIndex: 1 },
+  InRoomNavigating: { tabs: ['Nav', 'Room', 'Chat', 'Search'], tabsWithPlace: ['Nav', 'Room', 'Chat', 'Place'], snap: ['15%', '40%', '75%'], defaultIndex: 0 },
+};
+
+const DEFAULT_CONFIG = { tabs: ['Room'] as BottomSheetTab[], tabsWithPlace: ['Room'] as BottomSheetTab[], snap: ['45%'], defaultIndex: 0 };
+
+// ── Tab content renderer (avoids inline conditionals in JSX) ──
+const TAB_COMPONENTS: Record<BottomSheetTab, React.ComponentType> = {
+  Room: RoomTab,
+  Search: SearchTab,
+  Place: PlaceTab,
+  Chat: ChatTab,
+  Directions: DirectionsTab,
+  Nav: NavTab,
+};
 
 export function MainBottomSheet() {
-  const { uiState, activeTab, setActiveTab, selectedPlace } = useAppStore();
+  const uiState = useAppStore((s) => s.uiState);
+  const activeTab = useAppStore((s) => s.activeTab);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
+  const selectedPlace = useAppStore((s) => s.selectedPlace);
   const bottomSheetRef = useRef<BottomSheet>(null);
 
-  // Derive available tabs and snap points based on state
-  const availableTabs: BottomSheetTab[] = useMemo(() => {
-    switch (uiState) {
-      case 'Home': return ['Room', 'Search'];
-      case 'PlaceSearch': return selectedPlace ? ['Room', 'Place'] : ['Room', 'Search'];
-      case 'GetDirections':
-      case 'RouteSelection': return ['Directions']; // No tabs shown because length is 1
-      case 'NavigatingSolo': return []; // No tabs, just footer
-      case 'InRoom': return ['Chat', 'People', 'Search'];
-      case 'InRoomNavigating': return ['Chat', 'People', 'Search'];
-      default: return ['Room'];
-    }
-  }, [uiState, selectedPlace]);
+  const config = TAB_CONFIG[uiState] || DEFAULT_CONFIG;
 
-  const snapPoints = useMemo(() => {
-    switch (uiState) {
-      case 'Home': return ['10%', '45%', '90%'];
-      case 'PlaceSearch': return ['10%', '45%', '90%'];
-      case 'GetDirections':
-      case 'RouteSelection': return ['10%', '40%'];
-      case 'NavigatingSolo': return ['10%'];
-      case 'InRoom': return ['10%', '40%', '90%'];
-      case 'InRoomNavigating': return ['10%', '40%', '90%'];
-      default: return ['45%'];
-    }
+  const availableTabs = useMemo(
+    () => selectedPlace ? config.tabsWithPlace : config.tabs,
+    [config, selectedPlace]
+  );
+
+  const snapPoints = config.snap;
+
+  // ── Snap to default index only when uiState changes ──
+  useEffect(() => {
+    bottomSheetRef.current?.snapToIndex(config.defaultIndex);
   }, [uiState]);
 
+  // ── Auto-select first tab if active tab is no longer valid ──
   useEffect(() => {
-    // When state changes, snap to appropriate point automatically
-    if (uiState === 'NavigatingSolo') bottomSheetRef.current?.snapToIndex(0); // 10%
-    else if (uiState === 'Home') bottomSheetRef.current?.snapToIndex(1); // 45%
-    else if (uiState === 'PlaceSearch') bottomSheetRef.current?.snapToIndex(1); // 45%
-    else if (uiState === 'InRoom') bottomSheetRef.current?.snapToIndex(1); // 40%
-    else if (uiState === 'GetDirections') bottomSheetRef.current?.snapToIndex(1); // 40%
-    
-    // Auto-select first tab if active is no longer valid
     if (!availableTabs.includes(activeTab) && availableTabs.length > 0) {
       setActiveTab(availableTabs[0]);
     }
-  }, [uiState, availableTabs, activeTab, setActiveTab]);
+  }, [availableTabs, activeTab, setActiveTab]);
+
+  const ActiveTabComponent = TAB_COMPONENTS[activeTab];
 
   return (
     <BottomSheet
       ref={bottomSheetRef}
       snapPoints={snapPoints}
-      index={1}
-      backgroundStyle={{ backgroundColor: '#1c1c1e', borderRadius: 24 }} // secondary color
-      handleIndicatorStyle={{ backgroundColor: '#38383a', width: 40 }} // border color
+      index={config.defaultIndex}
+      backgroundStyle={{ backgroundColor: '#1c1c1e', borderRadius: 24 }}
+      handleIndicatorStyle={{ backgroundColor: '#38383a', width: 40 }}
       keyboardBehavior="extend"
       keyboardBlurBehavior="restore"
       android_keyboardInputMode="adjustPan"
@@ -96,12 +105,7 @@ export function MainBottomSheet() {
         )}
 
         <View className="flex-1">
-          {activeTab === 'Room' && <RoomTab />}
-          {activeTab === 'Search' && <SearchTab />}
-          {activeTab === 'Place' && <PlaceTab />}
-          {activeTab === 'Chat' && <ChatTab />}
-          {activeTab === 'People' && <PeopleTab />}
-          {activeTab === 'Directions' && <DirectionsTab />}
+          {ActiveTabComponent && <ActiveTabComponent />}
         </View>
       </BottomSheetView>
     </BottomSheet>
