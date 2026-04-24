@@ -4,6 +4,7 @@ import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Send, MapPin } from 'lucide-react-native';
 import { useAuthStore } from '../../../store/useAuthStore';
 import { useRoomStore } from '../../../store/useRoomStore';
+import { useAppStore } from '../../../store/useAppStore';
 
 function formatMessageTime(createdAtMs: number): string {
   const date = new Date(createdAtMs);
@@ -27,6 +28,10 @@ export function ChatTab() {
   const chatError = useRoomStore((s) => s.chatError);
   const isSendingMessage = useRoomStore((s) => s.isSendingMessage);
   const sendChatText = useRoomStore((s) => s.sendChatText);
+  const uiState = useAppStore((s) => s.uiState);
+  const setSelectedPlace = useAppStore((s) => s.setSelectedPlace);
+  const setUiState = useAppStore((s) => s.setUiState);
+  const setActiveTab = useAppStore((s) => s.setActiveTab);
 
   const [text, setText] = useState('');
   const scrollRef = useRef<ScrollView>(null);
@@ -56,6 +61,36 @@ export function ChatTab() {
     }
   };
 
+  const handleViewPlace = (place: NonNullable<(typeof messages)[number]['place']>) => {
+    setSelectedPlace({
+      id: place.id,
+      name: `places/${place.id}`,
+      displayName: { text: place.name || 'Shared Place', languageCode: 'en' },
+      formattedAddress: place.address || '',
+      rating: 0,
+      userRatingCount: 0,
+      types: ['establishment'],
+      location:
+        typeof place.lat === 'number' && typeof place.lng === 'number'
+          ? { lat: place.lat, lng: place.lng }
+          : undefined,
+    });
+
+    if (uiState === 'InRoomGetDirections') {
+      setUiState('InRoom');
+      setActiveTab('Place');
+      return;
+    }
+
+    if (uiState === 'InRoom' || uiState === 'InRoomNavigating' || uiState === 'NavigatingSolo') {
+      setActiveTab('Place');
+      return;
+    }
+
+    setUiState('PlaceSearch');
+    setActiveTab('Place');
+  };
+
   if (!isInRoom) {
     return (
       <View className="flex-1 px-4 pt-4">
@@ -80,6 +115,7 @@ export function ChatTab() {
           const isSelf = user?.uid === message.senderUid;
           const bubbleWrap = isSelf ? 'items-end pl-12' : 'items-start pr-12';
           const bubbleColor = isSelf ? 'bg-primary rounded-tr-sm' : 'bg-secondary rounded-tl-sm';
+          const bubbleSelfAlign = isSelf ? 'self-end' : 'self-start';
           const textColor = isSelf ? 'text-white' : 'text-foreground';
           const timeColor = isSelf ? 'text-white/70' : 'text-muted';
 
@@ -96,7 +132,7 @@ export function ChatTab() {
                 </View>
               )}
 
-              <View className={`p-3 rounded-2xl self-start max-w-full ${bubbleColor}`}>
+              <View className={`p-3 rounded-2xl max-w-full ${bubbleColor} ${bubbleSelfAlign}`}>
                 {message.type === 'place' && message.place ? (
                   <View className="min-w-52">
                     <View className="flex-row items-center mb-1">
@@ -109,6 +145,16 @@ export function ChatTab() {
                     <Text className={`${isSelf ? 'text-white/80' : 'text-muted'} text-xs mt-0.5`} numberOfLines={3}>
                       {message.place.address}
                     </Text>
+                    <TouchableOpacity
+                      className={`mt-2 px-2.5 py-1.5 rounded-lg self-start ${
+                        isSelf ? 'bg-white/20' : 'bg-primary/15'
+                      }`}
+                      onPress={() => handleViewPlace(message.place!)}
+                    >
+                      <Text className={`${isSelf ? 'text-white' : 'text-primary'} text-xs font-semibold`}>
+                        View on map
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 ) : (
                   <Text className={textColor}>{message.text || ''}</Text>

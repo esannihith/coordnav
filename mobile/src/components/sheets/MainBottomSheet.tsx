@@ -43,6 +43,7 @@ export function MainBottomSheet() {
   const activeTab = useAppStore((s) => s.activeTab);
   const setActiveTab = useAppStore((s) => s.setActiveTab);
   const selectedPlace = useAppStore((s) => s.selectedPlace);
+  const searchResults = useAppStore((s) => s.searchResults);
   const isInRoom = useRoomStore((s) => s.isInRoom);
   const bottomSheetRef = useRef<BottomSheet>(null);
 
@@ -72,10 +73,14 @@ export function MainBottomSheet() {
   }, [uiState, isNavSessionActive, isInRoom]);
 
   const config = TAB_CONFIG[effectiveUiState] || DEFAULT_CONFIG;
+  const hasRestaurantResults = useMemo(
+    () => (searchResults as any[]).some((result) => result?.source === 'restaurant'),
+    [searchResults]
+  );
 
   const availableTabs = useMemo(
-    () => selectedPlace ? config.tabsWithPlace : config.tabs,
-    [config, selectedPlace]
+    () => (selectedPlace || hasRestaurantResults || activeTab === 'Place') ? config.tabsWithPlace : config.tabs,
+    [config, selectedPlace, hasRestaurantResults, activeTab]
   );
 
   const snapPoints = config.snap;

@@ -72,7 +72,7 @@ export async function waitForNavigatorReady(
       const timeout = setTimeout(() => finish(false), timeoutMs);
 
       try {
-        controller.setOnNavigationReady(() => finish(true));
+        controller.setOnNavigationReady?.(() => finish(true));
       } catch {
         finish(false);
       }

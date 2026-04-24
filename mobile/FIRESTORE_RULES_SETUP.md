@@ -11,6 +11,7 @@ Use [firestore.rules](/Users/saerukul/projects/coordnav/mobile/firestore.rules) 
 - Allows room members to create/read room chat messages.
 - Keeps message edits/deletes disabled for MVP.
 - Handles batched owner cleanup safely (member deletes are allowed when owner is deleting the room in the same request).
+- Allows owner cleanup to delete room chat docs during end-room/last-owner-leave flow.
 
 ## Notes
 - These rules assume Google-auth users (`request.auth != null`).

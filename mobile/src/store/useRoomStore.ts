@@ -33,6 +33,7 @@ interface RoomStoreState {
   isSharing: boolean;
   shareIntentOn: boolean;
   shareStatus: ShareStatus;
+  memberEventsPrimed: boolean;
 
   roomUnsubscribe: (() => void) | null;
   membersUnsubscribe: (() => void) | null;
@@ -115,6 +116,7 @@ function initialRoomState() {
     isSharing: false,
     shareIntentOn: false,
     shareStatus: 'off' as ShareStatus,
+    memberEventsPrimed: false,
     roomUnsubscribe: null as (() => void) | null,
     membersUnsubscribe: null as (() => void) | null,
     messagesUnsubscribe: null as (() => void) | null,
@@ -305,10 +307,37 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
       roomCode,
       (members) => {
         const user = useAuthStore.getState().user;
+        const previousMembers = get().members;
+        const wasPrimed = get().memberEventsPrimed;
         set((state) => ({
           members,
           isOwner: Boolean(user && state.ownerUid === user.uid),
+          memberEventsPrimed: true,
         }));
+
+        if (!wasPrimed) {
+          return;
+        }
+
+        const previousIds = new Set(previousMembers.map((member) => member.uid));
+        const nextIds = new Set(members.map((member) => member.uid));
+
+        const joinedMembers = members.filter((member) => !previousIds.has(member.uid));
+        const leftMembers = previousMembers.filter((member) => !nextIds.has(member.uid));
+
+        joinedMembers.forEach((member) => {
+          if (member.uid === user?.uid) {
+            return;
+          }
+          useToastStore.getState().info(`${member.displayName} joined the room.`, { title: 'Member Joined' });
+        });
+
+        leftMembers.forEach((member) => {
+          if (member.uid === user?.uid) {
+            return;
+          }
+          useToastStore.getState().info(`${member.displayName} left the room.`, { title: 'Member Left' });
+        });
       },
       (error) => {
         set({ error: formatRoomError(error) });
@@ -331,6 +360,7 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
       messages: [],
       chatError: null,
       isSendingMessage: false,
+      memberEventsPrimed: false,
     });
   },
 

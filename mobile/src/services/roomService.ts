@@ -9,6 +9,7 @@ import {
   getDoc,
   getDocs,
   getFirestore,
+  limit,
   limitToLast,
   onSnapshot,
   orderBy,
@@ -16,6 +17,9 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
+  Timestamp,
+  DocumentData,
+  QueryDocumentSnapshot,
 } from '@react-native-firebase/firestore';
 
 const ROOM_COLLECTION = 'rooms';
@@ -50,7 +54,7 @@ export class RoomServiceError extends Error {
 export interface RoomDoc {
   ownerUid: string;
   roomName: string;
-  createdAt: FirebaseFirestoreTypes.Timestamp | null;
+  createdAt: Timestamp | null;
   isActive: boolean;
 }
 
@@ -58,10 +62,10 @@ export interface MemberDoc {
   uid: string;
   displayName: string;
   photoURL?: string | null;
-  joinedAt: FirebaseFirestoreTypes.Timestamp | null;
+  joinedAt: Timestamp | null;
   isSharing: boolean;
-  location?: FirebaseFirestoreTypes.GeoPoint | null;
-  updatedAt?: FirebaseFirestoreTypes.Timestamp | null;
+  location?: GeoPoint | null;
+  updatedAt?: Timestamp | null;
 }
 
 export interface RoomMember {
@@ -97,7 +101,7 @@ interface ChatMessageDocBase {
   senderUid: string;
   senderName: string;
   senderPhotoURL?: string | null;
-  createdAt: FirebaseFirestoreTypes.Timestamp | null;
+  createdAt: Timestamp | null;
   createdAtMs: number;
 }
 
@@ -169,7 +173,7 @@ function generateRoomCode(): string {
   return code;
 }
 
-function toRoomSnapshot(roomCode: string, docData: FirebaseFirestoreTypes.DocumentData): RoomSnapshot {
+function toRoomSnapshot(roomCode: string, docData: DocumentData): RoomSnapshot {
   return {
     roomCode,
     roomName: (docData.roomName as string) || 'Room',
@@ -179,7 +183,7 @@ function toRoomSnapshot(roomCode: string, docData: FirebaseFirestoreTypes.Docume
   };
 }
 
-function toMemberSnapshot(snapshot: FirebaseFirestoreTypes.QueryDocumentSnapshot): RoomMember {
+function toMemberSnapshot(snapshot: QueryDocumentSnapshot): RoomMember {
   const data = snapshot.data() as MemberDoc;
   return {
     uid: snapshot.id,
@@ -199,7 +203,7 @@ function toMemberSnapshot(snapshot: FirebaseFirestoreTypes.QueryDocumentSnapshot
 
 function toChatSnapshot(
   roomCode: string,
-  snapshot: FirebaseFirestoreTypes.QueryDocumentSnapshot
+  snapshot: QueryDocumentSnapshot
 ): ChatMessage {
   const data = snapshot.data() as ChatMessageDoc;
   const createdAtMs =
@@ -239,7 +243,7 @@ function toChatSnapshot(
 }
 
 function getNextOwnerUid(
-  memberDocs: FirebaseFirestoreTypes.QueryDocumentSnapshot[],
+  memberDocs: QueryDocumentSnapshot[],
   leavingUid: string
 ): string | null {
   for (const memberDoc of memberDocs) {
@@ -248,6 +252,23 @@ function getNextOwnerUid(
     }
   }
   return null;
+}
+
+async function deleteSubcollectionDocs(roomCode: string, subcollectionName: string): Promise<void> {
+  const subcollectionRef = collection(roomRef(roomCode), subcollectionName);
+  const pageSize = 100;
+
+  while (true) {
+    const snapshot = await getDocs(query(subcollectionRef, limit(pageSize)));
+    if (snapshot.empty) {
+      return;
+    }
+
+    await Promise.all(snapshot.docs.map((docSnapshot) => deleteDoc(docSnapshot.ref)));
+    if (snapshot.size < pageSize) {
+      return;
+    }
+  }
 }
 
 async function ensureRoomActive(roomCode: string): Promise<RoomSnapshot> {
@@ -366,8 +387,9 @@ export const roomService = {
         // Then remove current owner membership (self-delete is always allowed by rules).
         await deleteDoc(leavingMemberRef);
       } else {
-        // Last member/owner leaving: delete own member doc, then room.
+        // Last member/owner leaving: delete own member doc, room chat, then room.
         await deleteDoc(leavingMemberRef);
+        await deleteSubcollectionDocs(roomCode, CHAT_SUBCOLLECTION);
         await deleteDoc(roomDocRef);
       }
       return;
@@ -390,8 +412,9 @@ export const roomService = {
       throw new Error('Only the room owner can end the room.');
     }
 
-    // Delete all member docs first, then delete the room doc.
+    // Delete room chat and members first, then delete the room doc.
     // This avoids cross-document rule coupling when room and member docs are deleted together.
+    await deleteSubcollectionDocs(roomCode, CHAT_SUBCOLLECTION);
     const membersSnap = await getDocs(collection(roomDocRef, MEMBER_SUBCOLLECTION));
     for (const snapshot of membersSnap.docs) {
       await deleteDoc(snapshot.ref);
