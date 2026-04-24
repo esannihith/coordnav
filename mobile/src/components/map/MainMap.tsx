@@ -137,6 +137,7 @@ function MainMapInner() {
         navigationNightMode={NavigationNightMode.FORCE_NIGHT}
         navigationUIEnabledPreference={NavigationUIEnabledPreference.AUTOMATIC}
         compassEnabled={false}
+        myLocationEnabled={true}
         myLocationButtonEnabled={false}
         zoomControlsEnabled={true}
         indoorLevelPickerEnabled={true}

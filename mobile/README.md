@@ -1,1 +1,0 @@
-This is coodinated navigation mobile application

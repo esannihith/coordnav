@@ -10,6 +10,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { stopNavigation } from '../../services/navigationService';
 
 export function MapLayout() {
+  const [isMapReady, setIsMapReady] = React.useState(false);
   const uiState = useAppStore((s) => s.uiState);
   const activeTab = useAppStore((s) => s.activeTab);
   const setUiStateAndTab = useAppStore((s) => s.setUiStateAndTab);
@@ -17,6 +18,12 @@ export function MapLayout() {
   const leaveRoom = useAppStore((s) => s.leaveRoom);
 
   const { navigationController } = useNavigation();
+
+  useEffect(() => {
+    // Small delay to allow BottomSheet to initialize before Map heavy lifting
+    const timer = setTimeout(() => setIsMapReady(true), 100);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     const onBackPress = () => {
@@ -137,7 +144,7 @@ export function MapLayout() {
 
   return (
     <View className="flex-1">
-      <MainMap />
+      {isMapReady && <MainMap />}
 
       {/* UI Overlay Layer */}
       <View className="absolute inset-0 pointer-events-box-none">

@@ -77,8 +77,7 @@ export default {
         }
       ],
       "expo-system-ui",
-      "expo-secure-store",
-        
+      "@react-native-firebase/app",
       "@react-native-google-signin/google-signin"
     ],
     "extra": {

@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { View, TouchableOpacity, Text } from 'react-native';
-import { Compass, Map } from 'lucide-react-native';
+import { View, TouchableOpacity, Text, Image } from 'react-native';
+import { Compass, Map, User } from 'lucide-react-native';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { useNavigation } from '@googlemaps/react-native-navigation-sdk';
+import { useRouter } from 'expo-router';
 import { useAppStore } from '../../store/useAppStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import { cn } from '../../lib/utils';
 
 const selectUiState = (s: ReturnType<typeof useAppStore.getState>) => s.uiState;
@@ -11,6 +13,8 @@ const selectUiState = (s: ReturnType<typeof useAppStore.getState>) => s.uiState;
 export function FABStack() {
   const uiState = useAppStore(selectUiState);
   const isNavigating = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
+  const router = useRouter();
+  const { user } = useAuthStore();
 
   const { setOnLocationChanged } = useNavigation();
   const [speedKmh, setSpeedKmh] = useState(0);
@@ -51,7 +55,7 @@ export function FABStack() {
       onPress={onPress}
       className={cn(
         "w-12 h-12 rounded-full bg-secondary/90 items-center justify-center mb-3",
-        "border border-border shadow-lg shadow-black/50 pointer-events-auto",
+        "border border-border shadow-lg shadow-black/50 pointer-events-auto overflow-hidden",
         btnClassName
       )}
     >
