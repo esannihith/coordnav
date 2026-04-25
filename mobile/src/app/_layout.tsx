@@ -6,9 +6,11 @@ import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useAuthStore } from "../store/useAuthStore";
 import { authService } from "../services/authService";
+import { useUpdates } from "../hooks/useUpdates";
 import { ToastHost } from "../components/feedback/ToastHost";
 
 function RootLayout() {
+  useUpdates();
   const setUser = useAuthStore((state) => state.setUser);
 
   useEffect(() => {
