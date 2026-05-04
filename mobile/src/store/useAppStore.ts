@@ -85,13 +85,13 @@ export const useAppStore = create<AppState>((set) => ({
       activeTab,
       ...(clearData
         ? {
-            selectedPlace: null,
-            destination: null,
-            routes: [],
-            selectedRouteId: null,
-            searchQuery: '',
-            searchResults: [],
-          }
+          selectedPlace: null,
+          destination: null,
+          routes: [],
+          selectedRouteId: null,
+          searchQuery: '',
+          searchResults: [],
+        }
         : {}),
     })),
 

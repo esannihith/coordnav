@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { AppState, View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   NavigationView,
@@ -11,7 +11,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useRoomStore } from '../../store/useRoomStore';
 import { calculateBoundsCamera } from '../../utils/mapCamera';
-import { isMemberStale } from '../../services/roomService';
+import { isMemberStale, isMemberDead } from '../../services/roomService';
 
 const selectRoutes = (s: ReturnType<typeof useAppStore.getState>) => s.routes;
 const selectSelectedRouteId = (s: ReturnType<typeof useAppStore.getState>) => s.selectedRouteId;
@@ -73,18 +73,49 @@ function MainMapInner() {
   const currentRoomCode = useRoomStore(selectCurrentRoomCode);
   const currentUid = useAuthStore(selectCurrentUid);
 
+  // staleTick increments every 15s to evict stale member markers.
+  // forceRedrawTick is bumped imperatively (e.g. on foreground restore) to force
+  // a full marker redraw even when roomMembers hasn't changed.
   const [staleTick, setStaleTick] = useState(0);
+  const [forceRedrawTick, setForceRedrawTick] = useState(0);
+
+  // isMapReady is React state (not just a ref) so that effects depending on
+  // it automatically re-run the moment the SDK map becomes ready.
+  const [isMapReady, setIsMapReady] = useState(false);
 
   const mapControllerRef = useRef<MapViewController | null>(null);
+  // Kept in sync with the isMapReady state for synchronous checks inside effect bodies.
   const isMapReadyRef = useRef(false);
   const drawnRouteIdsRef = useRef<Set<string>>(new Set());
-  const drawnMemberMarkerIdsRef = useRef<Set<string>>(new Set());
+  
+  // Maps a member's UID to the actual string ID currently drawn on the native map
+  const memberNativeIdMapRef = useRef<Map<string, string>>(new Map());
+  // Maps a member's UID to their current visual signature
   const memberMarkerSignaturesRef = useRef<Map<string, string>>(new Map());
+  
   const drawnSearchMarkerIdsRef = useRef<Set<string>>(new Set());
+
+  // Sync ref with state so effect bodies can do synchronous reads.
+  useEffect(() => {
+    isMapReadyRef.current = isMapReady;
+  }, [isMapReady]);
 
   useEffect(() => {
     const timer = setInterval(() => setStaleTick((tick) => tick + 1), 15_000);
     return () => clearInterval(timer);
+  }, []);
+
+  // When the app comes back to the foreground the native map view may have
+  // discarded its imperative state (markers). Clear the signature cache so
+  // the next effect run redraws every member marker unconditionally.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        memberMarkerSignaturesRef.current.clear();
+        setForceRedrawTick((tick) => tick + 1);
+      }
+    });
+    return () => subscription.remove();
   }, []);
 
   const handleMapControllerCreated = useCallback((controller: MapViewController) => {
@@ -93,6 +124,7 @@ function MainMapInner() {
 
   const handleMapReady = useCallback(() => {
     isMapReadyRef.current = true;
+    setIsMapReady(true);
   }, []);
 
   const handlePolylineClick = useCallback(
@@ -105,8 +137,9 @@ function MainMapInner() {
   );
 
   useEffect(() => {
+    if (!isMapReady) return;
     const controller = mapControllerRef.current;
-    if (!controller || !isMapReadyRef.current) return;
+    if (!controller) return;
 
     if (isNavActive) {
       drawnRouteIdsRef.current.forEach((id) => controller.removePolyline(id));
@@ -162,11 +195,12 @@ function MainMapInner() {
     };
 
     void updateRoutes();
-  }, [routes, selectedRouteId, isNavActive]);
+  }, [routes, selectedRouteId, isNavActive, isMapReady]);
 
   useEffect(() => {
+    if (!isMapReady) return;
     const controller = mapControllerRef.current as any;
-    if (!controller || !isMapReadyRef.current) return;
+    if (!controller) return;
 
     const addMarker = typeof controller.addMarker === 'function' ? controller.addMarker.bind(controller) : null;
     const removeMarker =
@@ -181,16 +215,14 @@ function MainMapInner() {
     }
 
     if (!currentRoomCode) {
-      drawnMemberMarkerIdsRef.current.forEach((id) => removeMarker(id));
-      drawnMemberMarkerIdsRef.current.clear();
+      memberNativeIdMapRef.current.forEach((nativeId) => removeMarker(nativeId));
+      memberNativeIdMapRef.current.clear();
       memberMarkerSignaturesRef.current.clear();
       return;
     }
 
     const now = Date.now();
-    const nextIds = new Set<string>();
-    const nextSignatures = new Map<string, string>();
-    const markerUpdates: Array<{ id: string; signature: string; payload: any }> = [];
+    const activeMemberUids = new Set<string>();
 
     roomMembers.forEach((member) => {
       if (member.uid === currentUid) {
@@ -198,14 +230,18 @@ function MainMapInner() {
         return;
       }
 
-      if (!member.location || !member.isSharing || isMemberStale(member, now)) {
+      if (!member.location || !member.isSharing || isMemberDead(member, now)) {
         return;
       }
 
-      const markerId = `room-member-${member.uid}`;
-      const secondsAgo = member.updatedAtMs ? Math.max(1, Math.floor((now - member.updatedAtMs) / 1000)) : null;
+      activeMemberUids.add(member.uid);
       const displayName = member.displayName || 'Member';
       const initial = getDisplayInitial(displayName);
+      
+      const isStale = isMemberStale(member, now);
+      const secondsAgo = member.updatedAtMs ? Math.max(1, Math.floor((now - member.updatedAtMs) / 1000)) : 0;
+      const minutesAgo = Math.floor(secondsAgo / 60);
+
       const signature = [
         member.uid,
         displayName,
@@ -213,61 +249,80 @@ function MainMapInner() {
         member.location.lat,
         member.location.lng,
         member.updatedAtMs || 0,
+        isStale,
+        isStale ? minutesAgo : 0
       ].join('|');
-      const markerPayload: any = {
-        id: markerId,
-        position: member.location,
-        coordinate: member.location,
-        title: `${initial} • ${displayName}`,
-        snippet: secondsAgo ? `Updated ${secondsAgo}s ago` : 'Live',
-      };
 
-      // Custom marker attempt. SDK/device may ignore icon payload; title/snippet remains fallback identity.
-      if (member.photoURL) {
-        markerPayload.icon = { uri: member.photoURL };
-      } else {
-        markerPayload.icon = {
-          uri: buildInitialMarkerDataUri(initial, getMarkerColorFromUid(member.uid)),
-        };
-      }
-
-      nextIds.add(markerId);
-      nextSignatures.set(markerId, signature);
-      markerUpdates.push({ id: markerId, signature, payload: markerPayload });
-    });
-
-    drawnMemberMarkerIdsRef.current.forEach((existingId) => {
-      if (!nextIds.has(existingId)) {
-        removeMarker(existingId);
-      }
-    });
-
-    markerUpdates.forEach(({ id, signature, payload }) => {
-      const previousSignature = memberMarkerSignaturesRef.current.get(id);
+      const previousSignature = memberMarkerSignaturesRef.current.get(member.uid);
       if (previousSignature === signature) {
+        // Nothing changed visually — skip native call.
         return;
       }
 
-      if (previousSignature) {
-        removeMarker(id);
+      // Signature changed (or brand new member).
+      // We generate a completely unique native ID for this specific update.
+      // This PREVENTS the React Native bridge race condition where removeMarker(X) and addMarker(X)
+      // are called synchronously, causing the native SDK to accidentally delete the new marker.
+      const newNativeId = `room-member-${member.uid}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+
+      let snippet = 'Live';
+      if (isStale && minutesAgo > 0) {
+        snippet = `Last seen ${minutesAgo} min ago`;
+      } else if (isStale) {
+        snippet = 'Last seen recently';
+      }
+
+      const markerPayload: any = {
+        id: newNativeId,
+        position: member.location,
+        coordinate: member.location,
+        title: `${initial} • ${displayName}`,
+        snippet,
+        opacity: isStale ? 0.6 : 1.0,
+      };
+
+      // Temporarily stripping custom icon payload to debug asynchronous native crash.
+      // Native SDK may be rejecting remote URLs and SVG Data URIs dynamically.
+
+      // Remove the old marker if it exists BEFORE adding the new one with a different ID
+      const oldNativeId = memberNativeIdMapRef.current.get(member.uid);
+      if (oldNativeId) {
+        removeMarker(oldNativeId);
       }
 
       try {
-        addMarker(payload);
+        addMarker(markerPayload);
+        memberNativeIdMapRef.current.set(member.uid, newNativeId);
+        memberMarkerSignaturesRef.current.set(member.uid, signature);
       } catch {
-        const fallbackPayload = { ...payload };
+        const fallbackPayload = { ...markerPayload };
         delete fallbackPayload.icon;
-        addMarker(fallbackPayload);
+        try {
+          addMarker(fallbackPayload);
+          memberNativeIdMapRef.current.set(member.uid, newNativeId);
+          memberMarkerSignaturesRef.current.set(member.uid, signature);
+        } catch {
+          // Both failed, swallow
+        }
       }
     });
 
-    drawnMemberMarkerIdsRef.current = nextIds;
-    memberMarkerSignaturesRef.current = nextSignatures;
-  }, [roomMembers, currentRoomCode, staleTick, currentUid]);
+    // Cleanup members who left the room or went completely stale.
+    for (const [uid, nativeId] of memberNativeIdMapRef.current.entries()) {
+      if (!activeMemberUids.has(uid)) {
+        removeMarker(nativeId);
+        memberNativeIdMapRef.current.delete(uid);
+        memberMarkerSignaturesRef.current.delete(uid);
+      }
+    }
+  // forceRedrawTick is bumped on foreground restore to force a full redraw.
+  // staleTick fires every 15s to evict members whose location went stale.
+  }, [roomMembers, currentRoomCode, staleTick, forceRedrawTick, currentUid, isMapReady]);
 
   useEffect(() => {
+    if (!isMapReady) return;
     const controller = mapControllerRef.current as any;
-    if (!controller || !isMapReadyRef.current) return;
+    if (!controller) return;
 
     const addMarker = typeof controller.addMarker === 'function' ? controller.addMarker.bind(controller) : null;
     const removeMarker =
@@ -321,7 +376,7 @@ function MainMapInner() {
       });
       drawnSearchMarkerIdsRef.current.add(markerId);
     });
-  }, [activeTab, selectedPlace, searchResults]);
+  }, [activeTab, selectedPlace, searchResults, isMapReady]);
 
   useEffect(() => {
     const unsub = useAppStore.subscribe((state, prevState) => {
@@ -346,7 +401,7 @@ function MainMapInner() {
       drawnRouteIdsRef.current.forEach((id) => {
         controller.removePolyline?.(id);
       });
-      drawnMemberMarkerIdsRef.current.forEach((id) => {
+      memberNativeIdMapRef.current.forEach((id) => {
         if (typeof controller.removeMarker === 'function') {
           controller.removeMarker(id);
         } else if (typeof controller.removeMarkerById === 'function') {
@@ -363,7 +418,7 @@ function MainMapInner() {
       });
 
       drawnRouteIdsRef.current.clear();
-      drawnMemberMarkerIdsRef.current.clear();
+      memberNativeIdMapRef.current.clear();
       drawnSearchMarkerIdsRef.current.clear();
     };
   }, []);

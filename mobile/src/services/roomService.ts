@@ -34,6 +34,7 @@ const app = getApp();
 const db = getFirestore(app);
 
 export const ROOM_MEMBER_STALE_MS = 2 * 60 * 1000;
+export const ROOM_MEMBER_DEAD_MS = 2 * 60 * 60 * 1000;
 export const ROOM_CHAT_LIMIT = 100;
 
 export type RoomServiceErrorCode =
@@ -587,6 +588,11 @@ export const roomService = {
 export function isMemberStale(member: RoomMember, nowMs = Date.now()): boolean {
   if (!member.updatedAtMs) return true;
   return nowMs - member.updatedAtMs > ROOM_MEMBER_STALE_MS;
+}
+
+export function isMemberDead(member: RoomMember, nowMs = Date.now()): boolean {
+  if (!member.updatedAtMs) return true;
+  return nowMs - member.updatedAtMs > ROOM_MEMBER_DEAD_MS;
 }
 
 export function formatRoomError(error: unknown): string {

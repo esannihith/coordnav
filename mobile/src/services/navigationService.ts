@@ -157,7 +157,7 @@ export async function initNavSession(
     const termsAccepted =
       await navigationController.showTermsAndConditionsDialog();
     console.log('[NavService] Terms accepted:', termsAccepted);
-    
+
     if (!termsAccepted) {
       console.warn('[NavService] User declined terms');
       return false;

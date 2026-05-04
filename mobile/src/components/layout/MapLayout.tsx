@@ -12,6 +12,7 @@ import {
   isNativeGuidanceRunning,
   resetNativeNavigationSession,
   stopNavigation,
+  initNavSession
 } from '../../services/navigationService';
 
 export function MapLayout() {
@@ -44,6 +45,9 @@ export function MapLayout() {
 
     // Defensive startup reset: clear lingering native guidance and reconcile JS UI/session state.
     const bootstrapCleanup = async () => {
+      // Initialize the SDK immediately so the native blue dot appears on the map
+      await initNavSession(navigationController);
+
       const resetDone = await resetNativeNavigationSession(navigationController);
       if (cancelled) {
         return;
