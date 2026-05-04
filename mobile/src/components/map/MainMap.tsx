@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback, useState } from 'react';
-import { View, StyleSheet } from 'react-native';
+import { AppState, View, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   NavigationView,
@@ -11,7 +11,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { useAuthStore } from '../../store/useAuthStore';
 import { useRoomStore } from '../../store/useRoomStore';
 import { calculateBoundsCamera } from '../../utils/mapCamera';
-import { isMemberStale } from '../../services/roomService';
+import { isMemberStale, isMemberDead } from '../../services/roomService';
 
 const selectRoutes = (s: ReturnType<typeof useAppStore.getState>) => s.routes;
 const selectSelectedRouteId = (s: ReturnType<typeof useAppStore.getState>) => s.selectedRouteId;
@@ -73,18 +73,45 @@ function MainMapInner() {
   const currentRoomCode = useRoomStore(selectCurrentRoomCode);
   const currentUid = useAuthStore(selectCurrentUid);
 
+  // staleTick increments every 15s to evict stale member markers.
+  // forceRedrawTick is bumped imperatively (e.g. on foreground restore) to force
+  // a full marker redraw even when roomMembers hasn't changed.
   const [staleTick, setStaleTick] = useState(0);
+  const [forceRedrawTick, setForceRedrawTick] = useState(0);
+
+  // isMapReady is React state (not just a ref) so that effects depending on
+  // it automatically re-run the moment the SDK map becomes ready.
+  const [isMapReady, setIsMapReady] = useState(false);
 
   const mapControllerRef = useRef<MapViewController | null>(null);
+  // Kept in sync with the isMapReady state for synchronous checks inside effect bodies.
   const isMapReadyRef = useRef(false);
   const drawnRouteIdsRef = useRef<Set<string>>(new Set());
   const drawnMemberMarkerIdsRef = useRef<Set<string>>(new Set());
   const memberMarkerSignaturesRef = useRef<Map<string, string>>(new Map());
   const drawnSearchMarkerIdsRef = useRef<Set<string>>(new Set());
 
+  // Sync ref with state so effect bodies can do synchronous reads.
+  useEffect(() => {
+    isMapReadyRef.current = isMapReady;
+  }, [isMapReady]);
+
   useEffect(() => {
     const timer = setInterval(() => setStaleTick((tick) => tick + 1), 15_000);
     return () => clearInterval(timer);
+  }, []);
+
+  // When the app comes back to the foreground the native map view may have
+  // discarded its imperative state (markers). Clear the signature cache so
+  // the next effect run redraws every member marker unconditionally.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        memberMarkerSignaturesRef.current.clear();
+        setForceRedrawTick((tick) => tick + 1);
+      }
+    });
+    return () => subscription.remove();
   }, []);
 
   const handleMapControllerCreated = useCallback((controller: MapViewController) => {
@@ -93,6 +120,7 @@ function MainMapInner() {
 
   const handleMapReady = useCallback(() => {
     isMapReadyRef.current = true;
+    setIsMapReady(true);
   }, []);
 
   const handlePolylineClick = useCallback(
@@ -105,8 +133,9 @@ function MainMapInner() {
   );
 
   useEffect(() => {
+    if (!isMapReady) return;
     const controller = mapControllerRef.current;
-    if (!controller || !isMapReadyRef.current) return;
+    if (!controller) return;
 
     if (isNavActive) {
       drawnRouteIdsRef.current.forEach((id) => controller.removePolyline(id));
@@ -162,11 +191,12 @@ function MainMapInner() {
     };
 
     void updateRoutes();
-  }, [routes, selectedRouteId, isNavActive]);
+  }, [routes, selectedRouteId, isNavActive, isMapReady]);
 
   useEffect(() => {
+    if (!isMapReady) return;
     const controller = mapControllerRef.current as any;
-    if (!controller || !isMapReadyRef.current) return;
+    if (!controller) return;
 
     const addMarker = typeof controller.addMarker === 'function' ? controller.addMarker.bind(controller) : null;
     const removeMarker =
@@ -198,14 +228,21 @@ function MainMapInner() {
         return;
       }
 
-      if (!member.location || !member.isSharing || isMemberStale(member, now)) {
+      if (!member.location || !member.isSharing || isMemberDead(member, now)) {
         return;
       }
 
       const markerId = `room-member-${member.uid}`;
-      const secondsAgo = member.updatedAtMs ? Math.max(1, Math.floor((now - member.updatedAtMs) / 1000)) : null;
       const displayName = member.displayName || 'Member';
       const initial = getDisplayInitial(displayName);
+      
+      const isStale = isMemberStale(member, now);
+      const secondsAgo = member.updatedAtMs ? Math.max(1, Math.floor((now - member.updatedAtMs) / 1000)) : 0;
+      const minutesAgo = Math.floor(secondsAgo / 60);
+
+      // The signature captures every field that affects the visual appearance of
+      // the marker. When stale, we include the minute count so the 'Last seen'
+      // snippet updates once per minute instead of being frozen.
       const signature = [
         member.uid,
         displayName,
@@ -213,21 +250,33 @@ function MainMapInner() {
         member.location.lat,
         member.location.lng,
         member.updatedAtMs || 0,
+        isStale,
+        isStale ? minutesAgo : 0
       ].join('|');
+
+      let snippet = 'Live';
+      if (isStale && minutesAgo > 0) {
+        snippet = `Last seen ${minutesAgo} min ago`;
+      } else if (isStale) {
+        snippet = 'Last seen recently';
+      }
+
       const markerPayload: any = {
         id: markerId,
         position: member.location,
         coordinate: member.location,
         title: `${initial} • ${displayName}`,
-        snippet: secondsAgo ? `Updated ${secondsAgo}s ago` : 'Live',
+        snippet,
+        opacity: isStale ? 0.6 : 1.0,
       };
 
       // Custom marker attempt. SDK/device may ignore icon payload; title/snippet remains fallback identity.
       if (member.photoURL) {
         markerPayload.icon = { uri: member.photoURL };
       } else {
+        const color = isStale ? '#9ca3af' : getMarkerColorFromUid(member.uid);
         markerPayload.icon = {
-          uri: buildInitialMarkerDataUri(initial, getMarkerColorFromUid(member.uid)),
+          uri: buildInitialMarkerDataUri(initial, color),
         };
       }
 
@@ -236,19 +285,23 @@ function MainMapInner() {
       markerUpdates.push({ id: markerId, signature, payload: markerPayload });
     });
 
+    // Remove markers for members who left or went stale.
     drawnMemberMarkerIdsRef.current.forEach((existingId) => {
       if (!nextIds.has(existingId)) {
         removeMarker(existingId);
       }
     });
 
+    // Add or re-add markers whose signature changed (new position, name, photo).
     markerUpdates.forEach(({ id, signature, payload }) => {
       const previousSignature = memberMarkerSignaturesRef.current.get(id);
       if (previousSignature === signature) {
+        // Nothing changed — skip native call to avoid flicker.
         return;
       }
 
       if (previousSignature) {
+        // Existing marker with changed data: remove before re-adding.
         removeMarker(id);
       }
 
@@ -263,11 +316,14 @@ function MainMapInner() {
 
     drawnMemberMarkerIdsRef.current = nextIds;
     memberMarkerSignaturesRef.current = nextSignatures;
-  }, [roomMembers, currentRoomCode, staleTick, currentUid]);
+  // forceRedrawTick is bumped on foreground restore to force a full redraw.
+  // staleTick fires every 15s to evict members whose location went stale.
+  }, [roomMembers, currentRoomCode, staleTick, forceRedrawTick, currentUid, isMapReady]);
 
   useEffect(() => {
+    if (!isMapReady) return;
     const controller = mapControllerRef.current as any;
-    if (!controller || !isMapReadyRef.current) return;
+    if (!controller) return;
 
     const addMarker = typeof controller.addMarker === 'function' ? controller.addMarker.bind(controller) : null;
     const removeMarker =
@@ -321,7 +377,7 @@ function MainMapInner() {
       });
       drawnSearchMarkerIdsRef.current.add(markerId);
     });
-  }, [activeTab, selectedPlace, searchResults]);
+  }, [activeTab, selectedPlace, searchResults, isMapReady]);
 
   useEffect(() => {
     const unsub = useAppStore.subscribe((state, prevState) => {
