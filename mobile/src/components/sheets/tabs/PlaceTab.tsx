@@ -25,15 +25,15 @@ export function PlaceTab() {
   const isNavigating = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
   const isInRoom = uiState === 'InRoom' || uiState === 'InRoomNavigating' || uiState === 'InRoomGetDirections';
 
-  const restaurantResults = useMemo(
+  const contextualResults = useMemo(
     () =>
       (searchResults as AutocompletePrediction[])
-        .filter((item) => Boolean(item?.place_id) && item.source === 'restaurant')
+        .filter((item) => Boolean(item?.place_id) && item.source === 'contextual')
         .slice(0, 20),
     [searchResults]
   );
 
-  const showRestaurantList = restaurantResults.length > 0;
+  const showContextualList = contextualResults.length > 0;
 
   const handleDirections = async () => {
     try {
@@ -69,7 +69,7 @@ export function PlaceTab() {
     }
   };
 
-  const handleSelectRestaurant = async (prediction: AutocompletePrediction) => {
+  const handleSelectContextualResult = async (prediction: AutocompletePrediction) => {
     if (!prediction.place_id || loadingPlaceId) {
       return;
     }
@@ -169,7 +169,7 @@ export function PlaceTab() {
     );
   };
 
-  if (!selectedPlace && !showRestaurantList) {
+  if (!selectedPlace && !showContextualList) {
     return (
       <View className="flex-1 items-center justify-center p-4">
         <Text className="text-muted">No place selected</Text>
@@ -179,21 +179,21 @@ export function PlaceTab() {
 
   return (
     <ScrollView className="flex-1 p-4">
-      {showRestaurantList && (
+      {showContextualList && (
         <View className="mb-5">
           <Text className="text-muted text-xs font-bold uppercase tracking-wider mb-2">
-            Restaurant Results ({restaurantResults.length})
+            Contextual Results ({contextualResults.length})
           </Text>
 
           <View className="bg-secondary/30 rounded-xl border border-border overflow-hidden">
-            {restaurantResults.map((item) => {
+            {contextualResults.map((item) => {
               const isSelected = selectedPlace?.id === item.place_id;
               const isLoading = loadingPlaceId === item.place_id;
               return (
                 <TouchableOpacity
                   key={item.place_id}
                   onPress={() => {
-                    void handleSelectRestaurant(item);
+                    void handleSelectContextualResult(item);
                   }}
                   className={`px-3 py-3 border-b border-border/60 ${
                     isSelected ? 'bg-primary/15' : 'bg-transparent'
@@ -253,7 +253,7 @@ export function PlaceTab() {
         </>
       ) : (
         <View className="items-center justify-center py-8">
-          <Text className="text-muted text-sm">Select a restaurant to view details and actions.</Text>
+          <Text className="text-muted text-sm">Select a place to view details and actions.</Text>
         </View>
       )}
     </ScrollView>

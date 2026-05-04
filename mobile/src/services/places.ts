@@ -15,7 +15,7 @@ export interface AutocompletePrediction {
     lat: number;
     lng: number;
   };
-  source?: 'autocomplete' | 'restaurant';
+  source?: 'autocomplete' | 'contextual';
 }
 
 interface LatLngLiteral {
@@ -23,13 +23,7 @@ interface LatLngLiteral {
   lng: number;
 }
 
-function normalizeRestaurantKeyword(input: string): string {
-  return input
-    .replace(/@\S+/g, ' ')
-    .replace(/\b(search|find|show|me|for|near|restaurants?|restaurant)\b/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
+// Removed normalizeRestaurantKeyword
 
 async function resolveSearchOrigin(): Promise<LatLngLiteral | null> {
   const permission = await Location.getForegroundPermissionsAsync();
@@ -79,8 +73,8 @@ export async function autocompletePlaces(query: string): Promise<AutocompletePre
   }
 }
 
-export async function searchRestaurants(
-  queryText: string,
+export async function searchNearbyPlaces(
+  keyword: string,
   options?: {
     near?: LatLngLiteral | null;
     radiusMeters?: number;
@@ -96,16 +90,14 @@ export async function searchRestaurants(
     return [];
   }
 
-  const keyword = normalizeRestaurantKeyword(queryText);
   const radius = options?.radiusMeters ?? RESTAURANT_SEARCH_RADIUS_METERS;
   const params = [
     `location=${near.lat},${near.lng}`,
     `radius=${radius}`,
-    `type=restaurant`,
     `key=${API_KEY}`,
   ];
-  if (keyword.length > 0) {
-    params.push(`keyword=${encodeURIComponent(keyword)}`);
+  if (keyword && keyword.trim().length > 0) {
+    params.push(`keyword=${encodeURIComponent(keyword.trim())}`);
   }
 
   const url = `https://maps.googleapis.com/maps/api/place/nearbysearch/json?${params.join('&')}`;
@@ -114,7 +106,7 @@ export async function searchRestaurants(
     const response = await fetch(url);
     const data = await response.json();
     if (data.status !== 'OK' && data.status !== 'ZERO_RESULTS') {
-      console.error('Restaurant search error:', data.status, data.error_message);
+      console.error('Contextual search error:', data.status, data.error_message);
       return [];
     }
 
@@ -122,7 +114,7 @@ export async function searchRestaurants(
       place_id: result.place_id,
       description: result.vicinity ? `${result.name}, ${result.vicinity}` : result.name,
       structured_formatting: {
-        main_text: result.name || 'Restaurant',
+        main_text: result.name || 'Nearby Place',
         secondary_text: result.vicinity || result.formatted_address || 'Nearby',
       },
       location: result.geometry?.location
@@ -131,10 +123,10 @@ export async function searchRestaurants(
             lng: result.geometry.location.lng,
           }
         : undefined,
-      source: 'restaurant' as const,
+      source: 'contextual' as const,
     }));
   } catch (error) {
-    console.error('Restaurant search request failed:', error);
+    console.error('Contextual search request failed:', error);
     return [];
   }
 }

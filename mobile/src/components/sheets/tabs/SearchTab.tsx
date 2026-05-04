@@ -9,12 +9,16 @@ import { isMemberStale, RoomMember } from '../../../services/roomService';
 import {
   autocompletePlaces,
   getPlaceDetails,
-  searchRestaurants,
+  searchNearbyPlaces,
   AutocompletePrediction,
 } from '../../../services/places';
 
-function isRestaurantIntent(query: string): boolean {
-  return /\brestaurants?\b/i.test(query);
+function getContextualKeyword(query: string): string | null {
+  if (!/\bnear\s+@/i.test(query)) {
+    return null;
+  }
+  const match = query.match(/^(.*?)\s+near\s+@/i);
+  return match ? match[1].trim() : '';
 }
 
 function isNearMentionIntent(query: string): boolean {
@@ -168,11 +172,12 @@ export function SearchTab() {
     const timerId = setTimeout(async () => {
       if (searchQuery.length >= 2) {
         setIsLoading(true);
-        if (isRestaurantIntent(searchQuery)) {
-          // Restaurant search is explicit via action row; don't auto-fetch here.
+        const keyword = getContextualKeyword(searchQuery);
+        if (keyword !== null) {
+          // Contextual search is explicit via action row; don't auto-fetch here.
           const currentResults = useAppStore.getState().searchResults as AutocompletePrediction[];
-          const hasNonRestaurantResults = currentResults.some((item) => item.source !== 'restaurant');
-          if (hasNonRestaurantResults) {
+          const hasNonContextualResults = currentResults.some((item) => item.source !== 'contextual');
+          if (hasNonContextualResults) {
             setSearchResults([]);
           }
           setIsLoading(false);
@@ -190,20 +195,20 @@ export function SearchTab() {
     return () => clearTimeout(timerId);
   }, [searchQuery, setSearchResults, selectedMentionMember]);
 
-  const handleRestaurantSearchTrigger = useCallback(async () => {
-    const needsMemberContext = isNearMentionIntent(searchQuery);
+  const handleContextualSearchTrigger = useCallback(async () => {
+    const keyword = getContextualKeyword(searchQuery);
+    if (keyword === null) return;
+    
     const mentionMember = selectedMentionMember;
 
-    if (needsMemberContext) {
-      if (!mentionMember || !hasLiveLocation(mentionMember)) {
-        return;
-      }
+    if (!mentionMember || !hasLiveLocation(mentionMember)) {
+      return;
     }
 
     setIsLoading(true);
     try {
-      const results = await searchRestaurants(searchQuery, {
-        near: needsMemberContext ? mentionMember!.location! : undefined,
+      const results = await searchNearbyPlaces(keyword, {
+        near: mentionMember.location!,
       });
       setSearchResults(results);
       setSelectedPlace(null);
@@ -252,11 +257,11 @@ export function SearchTab() {
     }
   };
 
+  const keyword = getContextualKeyword(searchQuery);
   const contextualSearchBlocked =
-    isRestaurantIntent(searchQuery) &&
-    isNearMentionIntent(searchQuery) &&
+    keyword !== null &&
     !hasLiveLocation(selectedMentionMember);
-  const showRestaurantTrigger = isRestaurantIntent(searchQuery) && searchQuery.trim().length >= 2;
+  const showContextualTrigger = keyword !== null;
 
   return (
     <View className="flex-1 px-4 pt-2">
@@ -311,11 +316,11 @@ export function SearchTab() {
       )}
 
       <ScrollView showsVerticalScrollIndicator={false}>
-        {showRestaurantTrigger && (
+        {showContextualTrigger && (
           <TouchableOpacity
             disabled={contextualSearchBlocked || isLoading}
             onPress={() => {
-              void handleRestaurantSearchTrigger();
+              void handleContextualSearchTrigger();
             }}
             className={`mb-3 px-4 py-3 rounded-xl border ${
               contextualSearchBlocked || isLoading
@@ -324,12 +329,10 @@ export function SearchTab() {
             }`}
           >
             <Text className={`font-semibold ${contextualSearchBlocked ? 'text-muted' : 'text-primary'}`}>
-              {isNearMentionIntent(searchQuery)
-                ? `Search restaurants near @${selectedMentionMember?.displayName || 'member'}`
-                : 'Search restaurants near me'}
+              Search {keyword ? `'${keyword}' ` : ''}near @{selectedMentionMember?.displayName || 'member'}
             </Text>
             <Text className="text-xs text-muted mt-0.5">
-              Tap to run restaurant search.
+              Tap to run contextual search.
             </Text>
           </TouchableOpacity>
         )}
@@ -338,7 +341,7 @@ export function SearchTab() {
           searchQuery.length > 0 &&
           !isLoading &&
           !contextualSearchBlocked &&
-          !showRestaurantTrigger && (
+          !showContextualTrigger && (
           <Text className="text-muted text-center mt-4">No results found.</Text>
         )}
         
