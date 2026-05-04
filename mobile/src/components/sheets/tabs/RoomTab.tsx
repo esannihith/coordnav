@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image } from 'react-native';
+import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Image, Switch } from 'react-native';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
-import { ChevronLeft, LogIn, Plus, User, XCircle } from 'lucide-react-native';
+import { ChevronLeft, LogIn, Plus, User, XCircle, MapPin, Trash2, Navigation } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '../../../store/useAuthStore';
 import { useRoomStore } from '../../../store/useRoomStore';
+import { useAppStore } from '../../../store/useAppStore';
 import { isMemberStale, normalizeRoomCode } from '../../../services/roomService';
 
 function formatRelative(updatedAtMs: number | null): string {
@@ -36,6 +37,7 @@ export function RoomTab() {
     ownerUid,
     isInRoom,
     isOwner,
+    currentRoomDestination,
     members,
     isSharing,
     shareIntentOn,
@@ -53,6 +55,8 @@ export function RoomTab() {
   const [isCreating, setIsCreating] = useState(false);
   const [createRoomName, setCreateRoomName] = useState('');
   const [joinCode, setJoinCode] = useState('');
+
+  const isNavSessionActive = useAppStore((s) => s.isNavSessionActive);
 
   const isBusy = actionState !== 'idle';
 
@@ -127,6 +131,35 @@ export function RoomTab() {
     void toggleSharing(!shareIntentOn);
   };
 
+  const handleNavigateToDestination = async () => {
+    const dest = currentRoomDestination;
+    if (!dest) return;
+
+    const appStore = useAppStore.getState();
+    appStore.setSearchQuery('');
+    appStore.setSearchResults([]);
+    appStore.setSelectedPlace({
+      id: dest.id,
+      name: dest.name,
+      displayName: { text: dest.name, languageCode: 'en' },
+      formattedAddress: dest.address,
+      rating: 0,
+      userRatingCount: 0,
+      types: [],
+      location: { lat: dest.lat, lng: dest.lng },
+    });
+
+    try {
+      // In case they need location permissions to start navigation
+      const Location = require('expo-location');
+      await Location.enableNetworkProviderAsync();
+    } catch {
+      // Ignore
+    }
+
+    appStore.setUiStateAndTab('InRoomGetDirections', 'Directions');
+  };
+
   if (!user) {
     return (
       <View className="flex-1 px-4 pt-4">
@@ -162,19 +195,77 @@ export function RoomTab() {
               </View>
             </View>
 
-            <TouchableOpacity
-              onPress={toggleShare}
-              disabled={isBusy || shareStatus === 'starting'}
-              className={`rounded-xl border px-3 py-3 ${shareIntentOn ? 'bg-green-500/10 border-green-500/30' : 'bg-secondary border-border'}`}
-            >
-              <View className="flex-row items-center justify-between">
+            <View className="bg-secondary rounded-xl px-4 py-3 border border-border flex-row items-center justify-between">
+              <View>
                 <Text className={`font-semibold ${shareIntentOn ? 'text-green-400' : 'text-muted'}`}>
                   {shareIntentOn ? 'Live Sharing ON' : 'Live Sharing OFF'}
                 </Text>
-                {shareStatus === 'starting' && <ActivityIndicator size="small" color="#22c55e" />}
+                <View className="flex-row items-center mt-1">
+                  <Text className="text-xs text-muted mr-2">{sharingStatusText}</Text>
+                  {shareStatus === 'starting' && <ActivityIndicator size="small" color="#22c55e" />}
+                </View>
               </View>
-              <Text className="text-xs text-muted mt-1">{sharingStatusText}</Text>
-            </TouchableOpacity>
+              <Switch
+                value={shareIntentOn}
+                onValueChange={toggleShare}
+                disabled={isBusy || shareStatus === 'starting'}
+                trackColor={{ false: '#3f3f46', true: '#166534' }}
+                thumbColor={shareIntentOn ? '#22c55e' : '#a1a1aa'}
+              />
+            </View>
+
+            <View className="bg-secondary rounded-xl px-4 py-3 border border-border mt-3">
+              <View className="flex-row items-center justify-between mb-2">
+                <View className="flex-row items-center">
+                  <MapPin color="#8e8e93" size={16} className="mr-1.5" />
+                  <Text className="text-muted text-xs font-bold uppercase tracking-wider">Room Destination</Text>
+                </View>
+                {isOwner && (
+                  <View className="flex-row items-center gap-3">
+                    <TouchableOpacity
+                      onPress={() => useAppStore.getState().setActiveTab('Search')}
+                      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                    >
+                      <Text className="text-primary text-xs font-semibold">{currentRoomDestination ? 'Change' : 'Set'}</Text>
+                    </TouchableOpacity>
+                    {currentRoomDestination && (
+                      <TouchableOpacity
+                        onPress={() => {
+                          Alert.alert('Remove Destination?', 'This will clear the destination for all members.', [
+                            { text: 'Cancel', style: 'cancel' },
+                            { text: 'Remove', style: 'destructive', onPress: () => useRoomStore.getState().setDestination(null) },
+                          ]);
+                        }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Trash2 color="#ef4444" size={16} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+              </View>
+
+              {currentRoomDestination ? (
+                <View>
+                  <Text className="text-foreground font-semibold" numberOfLines={1}>{currentRoomDestination.name}</Text>
+                  {currentRoomDestination.address ? (
+                    <Text className="text-muted text-[11px] mt-0.5" numberOfLines={1}>{currentRoomDestination.address}</Text>
+                  ) : null}
+                  
+                  {!isNavSessionActive && (
+                    <TouchableOpacity
+                      onPress={handleNavigateToDestination}
+                      className="bg-primary/20 mt-3 py-2.5 rounded-lg flex-row items-center justify-center border border-primary/30"
+                    >
+                      <Navigation color="#60a5fa" size={16} className="mr-2" />
+                      <Text className="text-primary font-semibold text-sm">Navigate to Destination</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                <Text className="text-muted text-sm italic mt-1">No destination set.</Text>
+              )}
+            </View>
 
             <View className="flex-row mt-3 gap-2">
               <TouchableOpacity

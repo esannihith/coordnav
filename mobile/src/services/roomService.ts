@@ -52,11 +52,20 @@ export class RoomServiceError extends Error {
   }
 }
 
+export interface RoomDestination {
+  id: string;
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+}
+
 export interface RoomDoc {
   ownerUid: string;
   roomName: string;
   createdAt: Timestamp | null;
   isActive: boolean;
+  destination?: RoomDestination | null;
 }
 
 export interface MemberDoc {
@@ -85,6 +94,7 @@ export interface RoomSnapshot {
   ownerUid: string;
   isActive: boolean;
   createdAtMs: number | null;
+  destination?: RoomDestination | null;
 }
 
 export type ChatMessageType = 'text' | 'place';
@@ -181,6 +191,7 @@ function toRoomSnapshot(roomCode: string, docData: DocumentData): RoomSnapshot {
     ownerUid: docData.ownerUid as string,
     isActive: docData.isActive !== false,
     createdAtMs: docData.createdAt?.toMillis?.() ?? null,
+    destination: docData.destination as RoomDestination | undefined | null,
   };
 }
 
@@ -435,6 +446,22 @@ export const roomService = {
       },
       { merge: true }
     );
+  },
+
+  async setRoomDestination(roomCodeInput: string, destination: RoomDestination | null): Promise<void> {
+    const roomCode = normalizeRoomCode(roomCodeInput);
+    if (!roomCode) return;
+
+    const docData: Partial<RoomDoc> = {};
+    if (destination === null) {
+      // Technically we can't use FieldValue.delete() easily without importing it,
+      // so setting to null is perfectly valid for our schema and typing.
+      docData.destination = null;
+    } else {
+      docData.destination = destination;
+    }
+
+    await setDoc(roomRef(roomCode), docData, { merge: true });
   },
 
   async updateLiveLocation(roomCodeInput: string, uid: string, latitude: number, longitude: number): Promise<void> {

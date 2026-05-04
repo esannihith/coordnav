@@ -66,9 +66,6 @@ export function FABStack() {
   return (
     <View className="items-end pointer-events-none">
       <Animated.View style={speedStyle} className="pointer-events-auto">
-        <IconButton className="bg-primary/20 border-primary/50">
-          <Map color="#3b82f6" size={24} />
-        </IconButton>
         
         <View className="w-12 h-12 rounded-full bg-black/80 border-2 border-primary items-center justify-center mb-3">
           <Text className="text-white font-bold text-lg leading-tight">{speedKmh}</Text>
@@ -76,9 +73,6 @@ export function FABStack() {
         </View>
       </Animated.View>
 
-      <IconButton>
-        <Compass color="#fff" size={24} />
-      </IconButton>
     </View>
   );
 }

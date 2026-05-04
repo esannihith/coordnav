@@ -23,7 +23,8 @@ export function DirectionsTab() {
     setSelectedPlace,
     setSearchQuery,
     setSearchResults,
-    setNavSessionActive
+    setNavSessionActive,
+    startNavSession
   } = useAppStore();
   const isInRoom = useRoomStore((s) => s.isInRoom);
   const toastError = useToastStore((s) => s.error);
@@ -88,18 +89,9 @@ export function DirectionsTab() {
         return;
       }
 
-      // 3. Transition UI state
-      setDestination(selectedPlace);
-      setSelectedPlace(null);
-      setSearchQuery('');
-      setSearchResults([]);
-      setNavSessionActive(true);
-
-      if (isInRoom) {
-        setUiStateAndTab('InRoomNavigating', 'Nav');
-      } else {
-        setUiStateAndTab('NavigatingSolo', 'Nav');
-      }
+      // 3. Transition UI state atomically
+      const target = isInRoom ? 'InRoom' : 'Solo';
+      startNavSession(target, selectedPlace);
     } catch (error) {
       console.error('Navigation start error:', error);
       toastError('Failed to start navigation.');

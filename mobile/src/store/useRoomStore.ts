@@ -11,6 +11,7 @@ import {
   normalizeRoomCode,
   roomService,
   type RoomMember,
+  type RoomDestination,
 } from '../services/roomService';
 
 type RoomActionState = 'idle' | 'creating' | 'joining' | 'leaving' | 'ending';
@@ -20,6 +21,7 @@ interface RoomStoreState {
   currentRoomCode: string | null;
   currentRoomName: string | null;
   ownerUid: string | null;
+  currentRoomDestination: RoomDestination | null;
   isInRoom: boolean;
   isOwner: boolean;
   members: RoomMember[];
@@ -46,6 +48,7 @@ interface RoomStoreState {
   leaveRoom: () => Promise<void>;
   endRoom: () => Promise<void>;
   toggleSharing: (enabled: boolean) => Promise<void>;
+  setDestination: (destination: PlaceData | null) => Promise<void>;
 
   startListeners: (roomCode: string) => void;
   stopListeners: () => void;
@@ -105,6 +108,7 @@ function initialRoomState() {
     currentRoomCode: null,
     currentRoomName: null,
     ownerUid: null,
+    currentRoomDestination: null as RoomDestination | null,
     isInRoom: false,
     isOwner: false,
     members: [] as RoomMember[],
@@ -290,13 +294,25 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
         }
 
         const user = useAuthStore.getState().user;
+        const prevDestination = get().currentRoomDestination;
+
         set({
           currentRoomCode: room.roomCode,
           currentRoomName: room.roomName,
           ownerUid: room.ownerUid,
+          currentRoomDestination: room.destination ?? null,
           isOwner: Boolean(user && room.ownerUid === user.uid),
           isInRoom: true,
         });
+
+        // Optional: Toast if destination changed
+        if (
+          room.destination &&
+          prevDestination?.id !== room.destination.id &&
+          get().memberEventsPrimed
+        ) {
+          useToastStore.getState().info(`Destination set to ${room.destination.name}`, { title: 'Destination Changed' });
+        }
       },
       (error) => {
         set({ error: formatRoomError(error) });
@@ -425,6 +441,35 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
       set({ isSendingMessage: false, chatError: message });
       useToastStore.getState().error(message, { title: 'Chat Send Failed' });
       return false;
+    }
+  },
+
+  setDestination: async (placeData) => {
+    const state = get();
+    if (!state.currentRoomCode || !state.isInRoom || !state.isOwner) {
+      return;
+    }
+
+    let dest: RoomDestination | null = null;
+    if (placeData && placeData.id && placeData.location) {
+      dest = {
+        id: placeData.id,
+        name: placeData.displayName?.text || placeData.name,
+        address: placeData.formattedAddress || '',
+        lat: placeData.location.lat,
+        lng: placeData.location.lng,
+      };
+    }
+
+    try {
+      await roomService.setRoomDestination(state.currentRoomCode, dest);
+      if (dest) {
+        useToastStore.getState().success(`Destination set to ${dest.name}`, { title: 'Destination Updated' });
+      } else {
+        useToastStore.getState().success('Room destination cleared', { title: 'Destination Cleared' });
+      }
+    } catch (error) {
+      useToastStore.getState().error('Could not set room destination', { title: 'Update Failed' });
     }
   },
 

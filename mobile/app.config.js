@@ -9,6 +9,7 @@ export default {
     scheme: "coordnav",
     userInterfaceStyle: "automatic",
     newArchEnabled: true,
+    platforms: ["android"],
     updates: {
       url: "https://u.expo.dev/4ac0e924-3e95-45db-be0b-c8dd70524ada",
       checkAutomatically: "ON_LOAD",

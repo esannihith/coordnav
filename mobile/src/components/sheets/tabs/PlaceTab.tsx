@@ -17,7 +17,9 @@ export function PlaceTab() {
     setUiStateAndTab,
   } = useAppStore();
   const isInRoomSession = useRoomStore((s) => s.isInRoom);
+  const isOwner = useRoomStore((s) => s.isOwner);
   const sharePlaceToChat = useRoomStore((s) => s.sharePlaceToChat);
+  const setDestination = useRoomStore((s) => s.setDestination);
   const [loadingPlaceId, setLoadingPlaceId] = useState<string | null>(null);
 
   const isNavigating = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
@@ -108,29 +110,7 @@ export function PlaceTab() {
     // ── Secondary action (context-dependent) ──
     let secondaryButton = null;
 
-    if (isInRoom) {
-      // In any room state → Share to Chat
-      secondaryButton = (
-        <TouchableOpacity
-          className="flex-1 bg-secondary py-3 rounded-xl flex-row items-center justify-center"
-          onPress={() => {
-            if (!selectedPlace) {
-              return;
-            }
-
-            void (async () => {
-              const shared = await sharePlaceToChat(selectedPlace);
-              if (shared) {
-                setActiveTab('Chat');
-              }
-            })();
-          }}
-        >
-          <Share2 color="#fff" size={20} className="mr-2" />
-          <Text className="text-foreground font-semibold">Share to Chat</Text>
-        </TouchableOpacity>
-      );
-    } else if (!isNavigating) {
+    if (!isInRoom && !isNavigating) {
       // Solo, not navigating → Create Room
       secondaryButton = (
         <TouchableOpacity
@@ -144,10 +124,47 @@ export function PlaceTab() {
     }
     // Solo + navigating → no secondary button (avoid accidental nav exit)
 
+    let roomActions = null;
+    if (isInRoom) {
+      roomActions = (
+        <View className="flex-row gap-4 mt-4">
+          {isOwner && (
+            <TouchableOpacity
+              className="flex-1 bg-amber-500/20 py-3 rounded-xl flex-row items-center justify-center border border-amber-500/30"
+              onPress={() => {
+                if (selectedPlace) {
+                  void setDestination(selectedPlace);
+                  setActiveTab('Room');
+                }
+              }}
+            >
+              <MapPin color="#fbbf24" size={20} className="mr-2" />
+              <Text className="text-amber-500 font-semibold text-center">Set Destination</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            className="flex-1 bg-secondary py-3 rounded-xl flex-row items-center justify-center border border-border"
+            onPress={() => {
+              if (!selectedPlace) return;
+              void sharePlaceToChat(selectedPlace).then((shared) => {
+                if (shared) setActiveTab('Chat');
+              });
+            }}
+          >
+            <Share2 color="#fff" size={20} className="mr-2" />
+            <Text className="text-foreground font-semibold">Share to Chat</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
     return (
-      <View className="flex-row gap-4 mb-6">
-        {primaryButton}
-        {secondaryButton}
+      <View className="mb-6">
+        <View className="flex-row gap-4">
+          {primaryButton}
+          {!isInRoom && secondaryButton}
+        </View>
+        {roomActions}
       </View>
     );
   };

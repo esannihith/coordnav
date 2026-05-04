@@ -61,6 +61,7 @@ interface AppState {
   // Stop navigation — clears nav data and transitions to Home
   stopNav: () => void;
   clearNavSessionData: () => void;
+  startNavSession: (target: 'InRoom' | 'Solo', destination: PlaceData) => void;
   endNavSession: (target: NavReturnTarget) => void;
 }
 
@@ -108,6 +109,17 @@ export const useAppStore = create<AppState>((set) => ({
       selectedPlace: null,
       searchQuery: '',
       searchResults: [],
+    }),
+
+  startNavSession: (target, destination) =>
+    set({
+      isNavSessionActive: true,
+      destination,
+      selectedPlace: null,
+      searchQuery: '',
+      searchResults: [],
+      uiState: target === 'InRoom' ? 'InRoomNavigating' : 'NavigatingSolo',
+      activeTab: 'Nav',
     }),
 
   endNavSession: (target) =>

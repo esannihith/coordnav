@@ -23,6 +23,7 @@ const selectSearchResults = (s: ReturnType<typeof useAppStore.getState>) => s.se
 
 const selectRoomMembers = (s: ReturnType<typeof useRoomStore.getState>) => s.members;
 const selectCurrentRoomCode = (s: ReturnType<typeof useRoomStore.getState>) => s.currentRoomCode;
+const selectCurrentRoomDestination = (s: ReturnType<typeof useRoomStore.getState>) => s.currentRoomDestination;
 const selectCurrentUid = (s: ReturnType<typeof useAuthStore.getState>) => s.user?.uid ?? null;
 
 function getDisplayInitial(name: string): string {
@@ -71,6 +72,7 @@ function MainMapInner() {
 
   const roomMembers = useRoomStore(selectRoomMembers);
   const currentRoomCode = useRoomStore(selectCurrentRoomCode);
+  const currentRoomDestination = useRoomStore(selectCurrentRoomDestination);
   const currentUid = useAuthStore(selectCurrentUid);
 
   // staleTick increments every 15s to evict stale member markers.
@@ -94,6 +96,7 @@ function MainMapInner() {
   const memberMarkerSignaturesRef = useRef<Map<string, string>>(new Map());
   
   const drawnSearchMarkerIdsRef = useRef<Set<string>>(new Set());
+  const drawnRoomDestinationMarkerIdRef = useRef<string | null>(null);
 
   // Sync ref with state so effect bodies can do synchronous reads.
   useEffect(() => {
@@ -379,6 +382,41 @@ function MainMapInner() {
   }, [activeTab, selectedPlace, searchResults, isMapReady]);
 
   useEffect(() => {
+    if (!isMapReady) return;
+    const controller = mapControllerRef.current as any;
+    if (!controller) return;
+
+    const addMarker = typeof controller.addMarker === 'function' ? controller.addMarker.bind(controller) : null;
+    const removeMarker =
+      typeof controller.removeMarker === 'function'
+        ? (id: string) => controller.removeMarker(id)
+        : typeof controller.removeMarkerById === 'function'
+          ? (id: string) => controller.removeMarkerById(id)
+          : null;
+
+    if (!addMarker || !removeMarker) {
+      return;
+    }
+
+    if (drawnRoomDestinationMarkerIdRef.current) {
+      removeMarker(drawnRoomDestinationMarkerIdRef.current);
+      drawnRoomDestinationMarkerIdRef.current = null;
+    }
+
+    if (currentRoomCode && currentRoomDestination && currentRoomDestination.lat && currentRoomDestination.lng) {
+      const markerId = `room-dest-${currentRoomDestination.id}`;
+      addMarker({
+        id: markerId,
+        position: { lat: currentRoomDestination.lat, lng: currentRoomDestination.lng },
+        coordinate: { lat: currentRoomDestination.lat, lng: currentRoomDestination.lng },
+        title: `⭐ ${currentRoomDestination.name}`,
+        snippet: currentRoomDestination.address || 'Room Destination',
+      });
+      drawnRoomDestinationMarkerIdRef.current = markerId;
+    }
+  }, [currentRoomCode, currentRoomDestination, isMapReady]);
+
+  useEffect(() => {
     const unsub = useAppStore.subscribe((state, prevState) => {
       const controller = mapControllerRef.current;
       if (!controller || !isMapReadyRef.current) return;
@@ -420,6 +458,14 @@ function MainMapInner() {
       drawnRouteIdsRef.current.clear();
       memberNativeIdMapRef.current.clear();
       drawnSearchMarkerIdsRef.current.clear();
+      if (drawnRoomDestinationMarkerIdRef.current) {
+        if (typeof controller.removeMarker === 'function') {
+          controller.removeMarker(drawnRoomDestinationMarkerIdRef.current);
+        } else if (typeof controller.removeMarkerById === 'function') {
+          controller.removeMarkerById(drawnRoomDestinationMarkerIdRef.current);
+        }
+        drawnRoomDestinationMarkerIdRef.current = null;
+      }
     };
   }, []);
 
@@ -428,7 +474,9 @@ function MainMapInner() {
       <NavigationView
         style={[StyleSheet.absoluteFill, { marginTop: isNavActive ? insets.top : 0 }]}
         navigationNightMode={NavigationNightMode.FORCE_NIGHT}
-        navigationUIEnabledPreference={NavigationUIEnabledPreference.AUTOMATIC}
+        navigationUIEnabledPreference={
+          isNavActive ? NavigationUIEnabledPreference.AUTOMATIC : NavigationUIEnabledPreference.DISABLED
+        }
         compassEnabled={false}
         myLocationEnabled={true}
         myLocationButtonEnabled={false}
