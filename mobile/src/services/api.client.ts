@@ -2,7 +2,7 @@
 import axios from "axios";
 import { useAuthStore } from "@/store/auth.store";
 
-const BASE_URL = "http://192.168.1.8:8000/api/v1";
+const BASE_URL = "https://deeply-concrete-sawfish.ngrok-free.app/api/v1";
 
 export const baseApiClient = axios.create({
   baseURL: BASE_URL,
