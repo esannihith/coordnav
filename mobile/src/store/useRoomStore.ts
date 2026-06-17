@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import * as Location from 'expo-location';
 import { AppState, AppStateStatus, NativeEventSubscription } from 'react-native';
-import { useAuthStore } from './useAuthStore';
+import { useAuthStore } from './auth.store';
 import { useAppStore, type PlaceData } from './useAppStore';
 import { useToastStore } from './useToastStore';
 import {
@@ -210,11 +210,11 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
 
       await roomService.updateLiveLocation(
         currentRoomCode,
-        user.uid,
+        user.id,
         currentPosition.coords.latitude,
         currentPosition.coords.longitude
       );
-      await roomService.setSharing(currentRoomCode, user.uid, true);
+      await roomService.setSharing(currentRoomCode, user.id, true);
 
       const subscription = await Location.watchPositionAsync(
         {
@@ -230,7 +230,7 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
 
           void roomService.updateLiveLocation(
             state.currentRoomCode,
-            user.uid,
+            user.id,
             location.coords.latitude,
             location.coords.longitude
           ).catch((error) => {
@@ -267,7 +267,7 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
     state.locationSubscription?.remove();
 
     if (updateBackend && currentRoomCode && user) {
-      await roomService.setSharing(currentRoomCode, user.uid, false).catch(() => undefined);
+      await roomService.setSharing(currentRoomCode, user.id, false).catch(() => undefined);
     }
 
     set({
@@ -301,7 +301,7 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
           currentRoomName: room.roomName,
           ownerUid: room.ownerUid,
           currentRoomDestination: room.destination ?? null,
-          isOwner: Boolean(user && room.ownerUid === user.uid),
+          isOwner: Boolean(user && room.ownerUid === user.id),
           isInRoom: true,
         });
 
@@ -327,7 +327,7 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
         const wasPrimed = get().memberEventsPrimed;
         set((state) => ({
           members,
-          isOwner: Boolean(user && state.ownerUid === user.uid),
+          isOwner: Boolean(user && state.ownerUid === user.id),
           memberEventsPrimed: true,
         }));
 
@@ -342,14 +342,14 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
         const leftMembers = previousMembers.filter((member) => !nextIds.has(member.uid));
 
         joinedMembers.forEach((member) => {
-          if (member.uid === user?.uid) {
+          if (member.uid === user?.id) {
             return;
           }
           useToastStore.getState().info(`${member.displayName} joined the room.`, { title: 'Member Joined' });
         });
 
         leftMembers.forEach((member) => {
-          if (member.uid === user?.uid) {
+          if (member.uid === user?.id) {
             return;
           }
           useToastStore.getState().info(`${member.displayName} left the room.`, { title: 'Member Left' });
@@ -562,7 +562,7 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
       set({
         currentRoomCode: created.roomCode,
         currentRoomName: created.roomName,
-        ownerUid: user.uid,
+        ownerUid: user.id,
         isOwner: true,
         isInRoom: true,
         members: [],
@@ -610,7 +610,7 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
         currentRoomCode: joinedRoom.roomCode,
         currentRoomName: joinedRoom.roomName,
         ownerUid: joinedRoom.ownerUid,
-        isOwner: joinedRoom.ownerUid === user.uid,
+        isOwner: joinedRoom.ownerUid === user.id,
         isInRoom: true,
         members: [],
         messages: [],
@@ -651,7 +651,7 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
 
     try {
       await state._stopForegroundSharing(false, 'off');
-      await roomService.leaveRoom(state.currentRoomCode, user.uid);
+      await roomService.leaveRoom(state.currentRoomCode, user.id);
 
       state.stopListeners();
       state._removeAppStateListener();
@@ -697,7 +697,7 @@ export const useRoomStore = create<RoomStoreState>((set, get) => ({
 
     try {
       await state._stopForegroundSharing(false, 'off');
-      await roomService.endRoom(state.currentRoomCode, user.uid);
+      await roomService.endRoom(state.currentRoomCode, user.id);
 
       state.stopListeners();
       state._removeAppStateListener();

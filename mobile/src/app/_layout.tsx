@@ -4,21 +4,17 @@ import { Slot } from "expo-router";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { useAuthStore } from "../store/useAuthStore";
-import { authService } from "../services/authService";
-import { useUpdates } from "../hooks/useUpdates";
-import { ToastHost } from "../components/feedback/ToastHost";
+import { useAuthStore } from "@/store/auth.store";
+import { useUpdates } from "@/hooks/useUpdates";
+import { ToastHost } from "@/components/feedback/ToastHost";
 
 function RootLayout() {
   useUpdates();
-  const setUser = useAuthStore((state) => state.setUser);
+  const loadSession = useAuthStore((state) => state.loadSession);
 
   useEffect(() => {
-    const subscriber = authService.onAuthStateChanged((user) => {
-      setUser(user);
-    });
-    return subscriber; // unsubscribe on unmount
-  }, [setUser]);
+    loadSession();
+  }, [loadSession]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

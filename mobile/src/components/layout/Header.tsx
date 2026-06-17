@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { User } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { useAuthStore } from '../../store/useAuthStore';
+import { useAuthStore } from '../../store/auth.store';
 import { cn } from '../../lib/utils';
 
 export function Header() {
@@ -12,7 +12,7 @@ export function Header() {
   const { user } = useAuthStore();
 
   return (
-    <View 
+    <View
       className={cn(
         "px-4 pb-4 pt-2 flex-row items-center justify-between pointer-events-box-none",
         "bg-background/80"
@@ -23,7 +23,7 @@ export function Header() {
         <Text className="text-2xl font-black text-foreground tracking-tight">CoordNav</Text>
       </View>
 
-      <TouchableOpacity 
+      <TouchableOpacity
         className="w-10 h-10 rounded-full bg-secondary items-center justify-center border border-border overflow-hidden pointer-events-auto"
         onPress={() => {
           console.log('Profile button pressed');
@@ -32,8 +32,8 @@ export function Header() {
         activeOpacity={0.7}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
       >
-        {user?.photoURL ? (
-          <Image source={{ uri: user.photoURL }} className="w-full h-full" />
+        {user?.picture ? (
+          <Image source={{ uri: user.picture }} className="w-full h-full" />
         ) : (
           <User color="#fff" size={20} />
         )}

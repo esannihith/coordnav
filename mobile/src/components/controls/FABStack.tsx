@@ -5,7 +5,7 @@ import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-na
 import { useNavigation } from '@googlemaps/react-native-navigation-sdk';
 import { useRouter } from 'expo-router';
 import { useAppStore } from '../../store/useAppStore';
-import { useAuthStore } from '../../store/useAuthStore';
+import { useAuthStore } from '../../store/auth.store';
 import { cn } from '../../lib/utils';
 
 const selectUiState = (s: ReturnType<typeof useAppStore.getState>) => s.uiState;
@@ -51,7 +51,7 @@ export function FABStack() {
   }));
 
   const IconButton = ({ children, onPress, className: btnClassName }: { children: React.ReactNode, onPress?: () => void, className?: string }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       onPress={onPress}
       className={cn(
         "w-12 h-12 rounded-full bg-secondary/90 items-center justify-center mb-3",
@@ -66,7 +66,7 @@ export function FABStack() {
   return (
     <View className="items-end pointer-events-none">
       <Animated.View style={speedStyle} className="pointer-events-auto">
-        
+
         <View className="w-12 h-12 rounded-full bg-black/80 border-2 border-primary items-center justify-center mb-3">
           <Text className="text-white font-bold text-lg leading-tight">{speedKmh}</Text>
           <Text className="text-primary text-[8px] font-bold">KM/H</Text>

@@ -1,12 +1,6 @@
-import { 
-  getAuth, 
-  onAuthStateChanged, 
-  signInWithCredential, 
-  signOut as firebaseSignOut,
-  GoogleAuthProvider,
-  FirebaseAuthTypes
-} from '@react-native-firebase/auth';
 import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
+import { Session, Tokens } from '@/types/user.types';
+import { baseApiClient } from '@/services/api.client';
 
 // Configure Google Sign-In with default options.
 GoogleSignin.configure({
@@ -15,16 +9,13 @@ GoogleSignin.configure({
 });
 
 export const authService = {
-  /**
-   * Handles Google Sign-In and Firebase authentication.
-   */
-  signInWithGoogle: async (): Promise<FirebaseAuthTypes.UserCredential> => {
+  signInWithGoogle: async (): Promise<Session> => {
     try {
       await GoogleSignin.hasPlayServices();
       
       try {
         await GoogleSignin.signOut();
-      } catch (e) {}
+      } catch (e) {} // ignore sign out error
 
       const { data } = await GoogleSignin.signIn();
       const idToken = data?.idToken;
@@ -33,9 +24,10 @@ export const authService = {
         throw new Error('No ID token found from Google Sign-In');
       }
 
-      // Modular style credential creation and sign in
-      const googleCredential = GoogleAuthProvider.credential(idToken);
-      return await signInWithCredential(getAuth(), googleCredential);
+      const response = await baseApiClient.post('/auth/google-signin', { idToken: idToken });
+      const { user, accessToken, refreshToken } = response.data.data;
+      return { user, tokens: { accessToken, refreshToken } };
+      
     } catch (error: any) {
       if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
         console.error('Google Sign-In Error:', error);
@@ -44,23 +36,24 @@ export const authService = {
     }
   },
 
-  signOut: async () => {
+  signOut: async ( refreshToken : string) => {
     try {
       await GoogleSignin.signOut();
-      await firebaseSignOut(getAuth());
+      await baseApiClient.post('/auth/signout', { refreshToken : refreshToken })
     } catch (error) {
       console.error('Sign-Out Error:', error);
+      throw error
     }
   },
 
-  /**
-   * Use the modular style as recommended by v22+ warning
-   */
-  onAuthStateChanged: (callback: (user: FirebaseAuthTypes.User | null) => void) => {
-    return onAuthStateChanged(getAuth(), callback);
-  },
-
-  getCurrentUser: () => {
-    return getAuth().currentUser;
+  refresh: async ( refreshToken : string) => {
+    try {
+      const response = await baseApiClient.post('/auth/refresh', { refreshToken : refreshToken })
+      return response.data.data as Tokens
+    } catch (error) {
+      console.error('Refresh Error:', error);
+      throw error
+    }
   },
 };
+

@@ -8,7 +8,7 @@ import {
   type MapViewController,
 } from '@googlemaps/react-native-navigation-sdk';
 import { useAppStore } from '../../store/useAppStore';
-import { useAuthStore } from '../../store/useAuthStore';
+import { useAuthStore } from '../../store/auth.store';
 import { useRoomStore } from '../../store/useRoomStore';
 import { calculateBoundsCamera } from '../../utils/mapCamera';
 import { isMemberStale, isMemberDead } from '../../services/roomService';
@@ -24,7 +24,7 @@ const selectSearchResults = (s: ReturnType<typeof useAppStore.getState>) => s.se
 const selectRoomMembers = (s: ReturnType<typeof useRoomStore.getState>) => s.members;
 const selectCurrentRoomCode = (s: ReturnType<typeof useRoomStore.getState>) => s.currentRoomCode;
 const selectCurrentRoomDestination = (s: ReturnType<typeof useRoomStore.getState>) => s.currentRoomDestination;
-const selectCurrentUid = (s: ReturnType<typeof useAuthStore.getState>) => s.user?.uid ?? null;
+const selectCurrentUid = (s: ReturnType<typeof useAuthStore.getState>) => s.user?.id ?? null;
 
 function getDisplayInitial(name: string): string {
   const trimmed = name.trim();
@@ -89,12 +89,12 @@ function MainMapInner() {
   // Kept in sync with the isMapReady state for synchronous checks inside effect bodies.
   const isMapReadyRef = useRef(false);
   const drawnRouteIdsRef = useRef<Set<string>>(new Set());
-  
+
   // Maps a member's UID to the actual string ID currently drawn on the native map
   const memberNativeIdMapRef = useRef<Map<string, string>>(new Map());
   // Maps a member's UID to their current visual signature
   const memberMarkerSignaturesRef = useRef<Map<string, string>>(new Map());
-  
+
   const drawnSearchMarkerIdsRef = useRef<Set<string>>(new Set());
   const drawnRoomDestinationMarkerIdRef = useRef<string | null>(null);
 
@@ -240,7 +240,7 @@ function MainMapInner() {
       activeMemberUids.add(member.uid);
       const displayName = member.displayName || 'Member';
       const initial = getDisplayInitial(displayName);
-      
+
       const isStale = isMemberStale(member, now);
       const secondsAgo = member.updatedAtMs ? Math.max(1, Math.floor((now - member.updatedAtMs) / 1000)) : 0;
       const minutesAgo = Math.floor(secondsAgo / 60);
@@ -318,8 +318,8 @@ function MainMapInner() {
         memberMarkerSignaturesRef.current.delete(uid);
       }
     }
-  // forceRedrawTick is bumped on foreground restore to force a full redraw.
-  // staleTick fires every 15s to evict members whose location went stale.
+    // forceRedrawTick is bumped on foreground restore to force a full redraw.
+    // staleTick fires every 15s to evict members whose location went stale.
   }, [roomMembers, currentRoomCode, staleTick, forceRedrawTick, currentUid, isMapReady]);
 
   useEffect(() => {

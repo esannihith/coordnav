@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, ScrollView, Alert, ActivityIndicator, Ima
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { ChevronLeft, LogIn, Plus, User, XCircle, MapPin, Trash2, Navigation } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { useAuthStore } from '../../../store/useAuthStore';
+import { useAuthStore } from '../../../store/auth.store';
 import { useRoomStore } from '../../../store/useRoomStore';
 import { useAppStore } from '../../../store/useAppStore';
 import { isMemberStale, normalizeRoomCode } from '../../../services/roomService';
@@ -84,7 +84,7 @@ export function RoomTab() {
           void (async () => {
             try {
               await leaveRoom();
-            } catch {}
+            } catch { }
           })();
         },
       },
@@ -101,7 +101,7 @@ export function RoomTab() {
           void (async () => {
             try {
               await endRoom();
-            } catch {}
+            } catch { }
           })();
         },
       },
@@ -251,7 +251,7 @@ export function RoomTab() {
                   {currentRoomDestination.address ? (
                     <Text className="text-muted text-[11px] mt-0.5" numberOfLines={1}>{currentRoomDestination.address}</Text>
                   ) : null}
-                  
+
                   {!isNavSessionActive && (
                     <TouchableOpacity
                       onPress={handleNavigateToDestination}
@@ -296,7 +296,7 @@ export function RoomTab() {
           </View>
 
           {members.map((member) => {
-            const isSelf = member.uid === user.uid;
+            const isSelf = member.uid === user.id;
             const stale = isMemberStale(member);
 
             let status = member.isSharing ? 'Live location on' : 'Sharing paused';
@@ -315,9 +315,8 @@ export function RoomTab() {
                     )}
                   </View>
                   <View
-                    className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border border-background ${
-                      member.isSharing && !stale ? 'bg-green-500' : 'bg-zinc-500'
-                    }`}
+                    className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border border-background ${member.isSharing && !stale ? 'bg-green-500' : 'bg-zinc-500'
+                      }`}
                   />
                 </View>
 

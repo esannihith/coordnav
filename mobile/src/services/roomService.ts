@@ -1,7 +1,6 @@
+import { User } from '@/types/user.types';
 import { getApp } from '@react-native-firebase/app';
-import { FirebaseAuthTypes } from '@react-native-firebase/auth';
 import {
-  FirebaseFirestoreTypes,
   GeoPoint,
   collection,
   deleteDoc,
@@ -157,8 +156,8 @@ function chatCollectionRef(roomCode: string) {
   return collection(roomRef(roomCode), CHAT_SUBCOLLECTION);
 }
 
-function normalizeDisplayName(user: FirebaseAuthTypes.User): string {
-  const trimmed = user.displayName?.trim();
+function normalizeDisplayName(user: User): string {
+  const trimmed = user.name?.trim();
   if (trimmed) return trimmed;
 
   const emailName = user.email?.split('@')[0]?.trim();
@@ -298,13 +297,13 @@ async function ensureRoomActive(roomCode: string): Promise<RoomSnapshot> {
 }
 
 export const roomService = {
-  async createRoom(user: FirebaseAuthTypes.User, roomNameInput: string): Promise<RoomCreateResult> {
+  async createRoom(user: User, roomNameInput: string): Promise<RoomCreateResult> {
     const roomName = roomNameInput.trim() || 'My Room';
 
     for (let attempt = 0; attempt < CREATE_ROOM_MAX_ATTEMPTS; attempt += 1) {
       const roomCode = generateRoomCode();
       const roomDocRef = roomRef(roomCode);
-      const myMemberRef = memberRef(roomCode, user.uid);
+      const myMemberRef = memberRef(roomCode, user.id);
 
       try {
         await runTransaction(db, async (transaction) => {
@@ -316,16 +315,16 @@ export const roomService = {
           const now = serverTimestamp();
 
           transaction.set(roomDocRef, {
-            ownerUid: user.uid,
+            ownerUid: user.id,
             roomName,
             createdAt: now,
             isActive: true,
           });
 
           transaction.set(myMemberRef, {
-            uid: user.uid,
+            uid: user.id,
             displayName: normalizeDisplayName(user),
-            photoURL: user.photoURL ?? null,
+            photoURL: user.picture ?? null,
             joinedAt: now,
             isSharing: false,
             location: null,
@@ -348,7 +347,7 @@ export const roomService = {
     );
   },
 
-  async joinRoom(roomCodeInput: string, user: FirebaseAuthTypes.User): Promise<RoomSnapshot> {
+  async joinRoom(roomCodeInput: string, user: User): Promise<RoomSnapshot> {
     const roomCode = normalizeRoomCode(roomCodeInput);
     if (roomCode.length !== ROOM_CODE_LENGTH) {
       throw new RoomServiceError('ROOM_NOT_FOUND', 'Invalid room code format.');
@@ -357,11 +356,11 @@ export const roomService = {
     const room = await ensureRoomActive(roomCode);
 
     await setDoc(
-      memberRef(roomCode, user.uid),
+      memberRef(roomCode, user.id),
       {
-        uid: user.uid,
+        uid: user.id,
         displayName: normalizeDisplayName(user),
-        photoURL: user.photoURL ?? null,
+        photoURL: user.picture ?? null,
         joinedAt: serverTimestamp(),
         isSharing: false,
         location: null,
@@ -481,7 +480,7 @@ export const roomService = {
 
   async sendTextMessage(
     roomCodeInput: string,
-    user: FirebaseAuthTypes.User,
+    user: User,
     textInput: string
   ): Promise<void> {
     const roomCode = normalizeRoomCode(roomCodeInput);
@@ -495,9 +494,9 @@ export const roomService = {
 
     await setDoc(messageRef, {
       type: 'text',
-      senderUid: user.uid,
+      senderUid: user.id,
       senderName: normalizeDisplayName(user),
-      senderPhotoURL: user.photoURL ?? null,
+      senderPhotoURL: user.picture ?? null,
       text,
       createdAt: serverTimestamp(),
       createdAtMs: Date.now(),
@@ -506,7 +505,7 @@ export const roomService = {
 
   async sendPlaceMessage(
     roomCodeInput: string,
-    user: FirebaseAuthTypes.User,
+    user: User,
     place: ChatPlacePayload
   ): Promise<void> {
     const roomCode = normalizeRoomCode(roomCodeInput);
@@ -518,9 +517,9 @@ export const roomService = {
 
     await setDoc(messageRef, {
       type: 'place',
-      senderUid: user.uid,
+      senderUid: user.id,
       senderName: normalizeDisplayName(user),
-      senderPhotoURL: user.photoURL ?? null,
+      senderPhotoURL: user.picture ?? null,
       place: {
         id: place.id,
         name: place.name,

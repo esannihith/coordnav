@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { statusCodes } from '@react-native-google-signin/google-signin';
 import {
   View,
   Text,
@@ -15,16 +16,10 @@ import {
   LogOut,
   ShieldCheck,
   ChevronRight,
-  Moon,
-  MapPin,
-  Bell,
-  FileText,
-  Lock,
-  Info,
 } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { useAuthStore } from '../../store/useAuthStore';
-import { authService } from '../../services/authService';
+import { useAuthStore } from '../../store/auth.store';
+import { authService } from '../../services/auth.service';
 
 // ─── Reusable components (polished with NativeWind) ────────────────────────
 
@@ -44,15 +39,12 @@ const SettingsRow = ({
   <TouchableOpacity
     onPress={onPress}
     activeOpacity={0.7}
-    className={`flex-row items-center px-4 py-3.5 min-h-[52px] ${
-      destructive ? '' : ''
-    }`}
+    className="flex-row items-center px-4 py-3.5 min-h-[52px]"
   >
     <View className="w-7 items-center mr-3">{icon}</View>
     <Text
-      className={`flex-1 text-base ${
-        destructive ? 'text-red-500' : 'text-white'
-      }`}
+      className={`flex-1 text-base ${destructive ? 'text-red-500' : 'text-white'
+        }`}
     >
       {label}
     </Text>
@@ -86,22 +78,21 @@ const Section = ({
   </View>
 );
 
-const RowDivider = () => <View className="h-px bg-gray-800 ml-12" />;
-
 // ─── Main screen ──────────────────────────────────────────────────────────
 
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { user, isAuthLoading } = useAuthStore();
+  const { user, isAuthLoading, setSession, clearSession } = useAuthStore();
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
     try {
-      await authService.signInWithGoogle();
+      const session = await authService.signInWithGoogle();
+      await setSession(session);
     } catch (error: any) {
-      if (error.code !== 'SIGN_IN_CANCELLED') {
+      if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
         Alert.alert('Sign-In Failed', 'Could not complete Google Sign-In. Please try again.');
       }
     } finally {
@@ -117,7 +108,7 @@ export default function ProfileScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            await authService.signOut();
+            await clearSession();
           } catch {
             Alert.alert('Sign-Out Failed', 'Could not sign out. Please try again.');
           }
@@ -154,14 +145,14 @@ export default function ProfileScreen() {
           {/* Avatar card */}
           <View className="items-center py-7 px-6">
             <View className="w-[88px] h-[88px] rounded-full bg-gray-900 border-2 border-blue-500 items-center justify-center overflow-hidden mb-3.5">
-              {user.photoURL ? (
-                <Image source={{ uri: user.photoURL }} className="w-full h-full" />
+              {user.picture ? (
+                <Image source={{ uri: user.picture }} className="w-full h-full" />
               ) : (
                 <User color="#2563EB" size={44} />
               )}
             </View>
             <Text className="text-xl font-bold text-white mb-1 text-center max-w-[260px]" numberOfLines={1}>
-              {user.displayName || 'User'}
+              {user.name || 'User'}
             </Text>
             <Text className="text-sm text-gray-400 mb-3 text-center max-w-[260px]" numberOfLines={1}>
               {user.email}
@@ -172,51 +163,6 @@ export default function ProfileScreen() {
               <Text className="text-xs font-medium text-green-500">Verified via Google</Text>
             </View>
           </View>
-
-          {/* Settings sections */}
-          <Section label="APPEARANCE">
-            <SettingsRow
-              icon={<Moon color="#6B7280" size={18} />}
-              label="Theme"
-              value="System"
-              onPress={() => {/* TODO: theme picker */}}
-            />
-          </Section>
-
-          <Section label="PRIVACY">
-            <SettingsRow
-              icon={<MapPin color="#6B7280" size={18} />}
-              label="Location Sharing"
-              value="Rooms only"
-              onPress={() => {/* TODO */}}
-            />
-            <RowDivider />
-            <SettingsRow
-              icon={<Bell color="#6B7280" size={18} />}
-              label="Notifications"
-              onPress={() => {/* TODO */}}
-            />
-          </Section>
-
-          <Section label="ABOUT">
-            <SettingsRow
-              icon={<FileText color="#6B7280" size={18} />}
-              label="Terms of Service"
-              onPress={() => {/* TODO */}}
-            />
-            <RowDivider />
-            <SettingsRow
-              icon={<Lock color="#6B7280" size={18} />}
-              label="Privacy Policy"
-              onPress={() => {/* TODO */}}
-            />
-            <RowDivider />
-            <SettingsRow
-              icon={<Info color="#6B7280" size={18} />}
-              label="Version"
-              value="1.0.0"
-            />
-          </Section>
 
           {/* Sign out */}
           <Section>
@@ -251,9 +197,8 @@ export default function ProfileScreen() {
             onPress={handleGoogleSignIn}
             disabled={isSigningIn}
             activeOpacity={0.85}
-            className={`flex-row items-center justify-center bg-white rounded-2xl py-4 px-6 gap-3 shadow-lg ${
-              isSigningIn ? 'opacity-65' : ''
-            }`}
+            className={`flex-row items-center justify-center bg-white rounded-2xl py-4 px-6 gap-3 shadow-lg ${isSigningIn ? 'opacity-65' : ''
+              }`}
           >
             {isSigningIn ? (
               <ActivityIndicator color="#0F1117" size="small" />

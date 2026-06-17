@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView } from 'react-native';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { Send, MapPin } from 'lucide-react-native';
-import { useAuthStore } from '../../../store/useAuthStore';
+import { useAuthStore } from '../../../store/auth.store';
 import { useRoomStore } from '../../../store/useRoomStore';
 import { useAppStore } from '../../../store/useAppStore';
 
@@ -112,7 +112,7 @@ export function ChatTab() {
         )}
 
         {messages.map((message) => {
-          const isSelf = user?.uid === message.senderUid;
+          const isSelf = user?.id === message.senderUid;
           const bubbleWrap = isSelf ? 'items-end pl-12' : 'items-start pr-12';
           const bubbleColor = isSelf ? 'bg-primary rounded-tr-sm' : 'bg-secondary rounded-tl-sm';
           const bubbleSelfAlign = isSelf ? 'self-end' : 'self-start';
@@ -146,9 +146,8 @@ export function ChatTab() {
                       {message.place.address}
                     </Text>
                     <TouchableOpacity
-                      className={`mt-2 px-2.5 py-1.5 rounded-lg self-start ${
-                        isSelf ? 'bg-white/20' : 'bg-primary/15'
-                      }`}
+                      className={`mt-2 px-2.5 py-1.5 rounded-lg self-start ${isSelf ? 'bg-white/20' : 'bg-primary/15'
+                        }`}
                       onPress={() => handleViewPlace(message.place!)}
                     >
                       <Text className={`${isSelf ? 'text-white' : 'text-primary'} text-xs font-semibold`}>
