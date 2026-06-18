@@ -12,6 +12,7 @@ interface AuthState {
   hasHydrated: boolean;
   isAuthLoading: boolean;
 
+  setAccessToken: (token : string) => void;
   setSession: (session: Session) => Promise<void>;
   loadSession: () => Promise<void>;
   clearSession: () => Promise<void>;
@@ -25,6 +26,12 @@ export const useAuthStore = create<AuthState>()(
       accessToken: null,
       hasHydrated: false,
       isAuthLoading: true,
+
+      setAccessToken: (token : string) => {
+        set({
+          accessToken : token,
+        })
+      },
 
       setSession: async (session: Session) => {
         await SecureStore.setItemAsync("refreshToken", session.tokens.refreshToken);
@@ -85,6 +92,7 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: null,
           accessToken: null,
+          isAuthLoading: false,
         });
       },
 
