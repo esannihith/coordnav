@@ -10,73 +10,70 @@ import {
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {
-  ChevronLeft,
-  User,
-  LogOut,
-  ShieldCheck,
-  ChevronRight,
-} from 'lucide-react-native';
+import { ChevronLeft, User, LogOut } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
-import { useAuthStore } from '../../store/auth.store';
-import { authService } from '../../services/auth.service';
+import { useAuthStore } from '@/store/auth.store';
+import { authService } from '@/services/auth.service';
+import { staticProfileGroups, ProfileActionType } from '@/config/profile.config';
 
-// ─── Reusable components (polished with NativeWind) ────────────────────────
+// ─── Row component ────────────────────────────────────────────────────────
 
-const SettingsRow = ({
+const Row = ({
+  iconBg,
   icon,
   label,
-  value,
+  labelColor = 'text-white',
+  right,
   onPress,
-  destructive = false,
+  disabled = false,
 }: {
+  iconBg: string;
   icon: React.ReactNode;
   label: string;
-  value?: string;
+  labelColor?: string;
+  right?: React.ReactNode;
   onPress?: () => void;
-  destructive?: boolean;
+  disabled?: boolean;
 }) => (
   <TouchableOpacity
     onPress={onPress}
-    activeOpacity={0.7}
-    className="flex-row items-center px-4 py-3.5 min-h-[52px]"
+    disabled={disabled}
+    activeOpacity={onPress && !disabled ? 0.65 : 1}
+    className="flex-row items-center px-3.5 h-[52px]"
   >
-    <View className="w-7 items-center mr-3">{icon}</View>
-    <Text
-      className={`flex-1 text-base ${destructive ? 'text-red-500' : 'text-white'
-        }`}
-    >
-      {label}
-    </Text>
-    {value ? (
-      <Text className="text-sm text-gray-400 mr-1">{value}</Text>
-    ) : (
-      <ChevronRight
-        size={18}
-        color={destructive ? '#EF4444' : '#6B7280'}
-      />
-    )}
+    {/* Icon */}
+    <View className={`w-[30px] h-[30px] rounded-lg items-center justify-center mr-3 overflow-hidden ${iconBg}`}>
+      {icon}
+    </View>
+
+    {/* Label */}
+    <Text className={`flex-1 text-[15px] ${labelColor}`}>{label}</Text>
+
+    {/* Right slot */}
+    {right}
   </TouchableOpacity>
 );
 
-const Section = ({
-  children,
-  label,
-}: {
-  children: React.ReactNode;
-  label?: string;
-}) => (
-  <View className="px-4 mb-2">
-    {label && (
-      <Text className="text-xs font-semibold text-gray-400 tracking-wider mb-1.5 ml-1">
-        {label}
-      </Text>
-    )}
-    <View className="bg-gray-900 rounded-2xl border border-gray-800 overflow-hidden">
-      {children}
+// ─── Group card: rounded container with inset dividers ────────────────────
+
+const GroupCard = ({ children }: { children: React.ReactNode }) => {
+  const rows = React.Children.toArray(children);
+  return (
+    <View className="mx-4 bg-[#0f172a] rounded-2xl border border-[#1F2937] overflow-hidden">
+      {rows.map((row, i) => (
+        <View key={i}>
+          {row}
+          {i < rows.length - 1 && (
+            // Inset divider — starts at 56px (14 pad + 30 icon + 12 gap)
+            <View className="pl-14 pr-3.5">
+              <View className="h-px bg-[#1e2a38]" />
+            </View>
+          )}
+        </View>
+      ))}
     </View>
-  </View>
-);
+  );
+};
 
 // ─── Main screen ──────────────────────────────────────────────────────────
 
@@ -117,106 +114,145 @@ export default function ProfileScreen() {
     ]);
   };
 
+  const handleMenuPress = (actionId: ProfileActionType) => {
+    switch (actionId) {
+      case 'theme':
+        // Future: handle theme change
+        break;
+      case 'notifications':
+        // Future: handle notifications change
+        break;
+      case 'help':
+        // Future: handle help
+        break;
+      case 'about':
+        // Future: handle about
+        break;
+    }
+  };
+
   return (
     <View
-      className="flex-1 bg-gray-950"
+      className="flex-1 bg-[#030712]"
       style={{ paddingTop: Math.max(insets.top, 16) }}
     >
-      {/* Header */}
-      <View className="flex-row items-center justify-between px-4 py-3 border-b border-gray-800">
-        <TouchableOpacity onPress={() => router.back()} className="w-10 h-10 items-center justify-center" hitSlop={8}>
+      {/* ── Nav bar ─────────────────────────────────────────────────────── */}
+      <View className="flex-row items-center justify-between px-4 py-3 border-b border-[#1F2937]">
+        <TouchableOpacity
+          onPress={() => router.back()}
+          className="w-10 h-10 items-center justify-center"
+          hitSlop={8}
+        >
           <ChevronLeft color="#F9FAFB" size={26} />
         </TouchableOpacity>
-        <Text className="text-lg font-semibold text-white">Account</Text>
+        <Text className="text-[17px] font-semibold text-white">Account</Text>
         <View className="w-10" />
       </View>
 
-      {/* Loading / signed-in / guest states */}
+      {/* ── Loading ──────────────────────────────────────────────────────── */}
       {isAuthLoading ? (
         <View className="flex-1 items-center justify-center">
-          <ActivityIndicator size="large" color="#2563EB" />
+          <ActivityIndicator size="large" color="#3B82F6" />
         </View>
-      ) : user ? (
+      ) : (
         <ScrollView
           className="flex-1"
-          contentContainerStyle={{ paddingBottom: insets.bottom + 24 }}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 32 }}
           showsVerticalScrollIndicator={false}
         >
-          {/* Avatar card */}
-          <View className="items-center py-7 px-6">
-            <View className="w-[88px] h-[88px] rounded-full bg-gray-900 border-2 border-blue-500 items-center justify-center overflow-hidden mb-3.5">
-              {user.picture ? (
+          {/* ── Identity strip ──────────────────────────────────────────── */}
+          <View className="flex-row items-center px-5 py-5 border-b border-[#1F2937]">
+            {/* Avatar */}
+            <View
+              className={`w-14 h-14 rounded-full items-center justify-center overflow-hidden mr-4 bg-[#0f172a] ${
+                user ? 'border-2 border-blue-500' : 'border border-[#1F2937]'
+              }`}
+            >
+              {user?.picture ? (
                 <Image source={{ uri: user.picture }} className="w-full h-full" />
               ) : (
-                <User color="#2563EB" size={44} />
+                <User color={user ? '#3B82F6' : '#6B7280'} size={28} />
               )}
             </View>
-            <Text className="text-xl font-bold text-white mb-1 text-center max-w-[260px]" numberOfLines={1}>
-              {user.name || 'User'}
-            </Text>
-            <Text className="text-sm text-gray-400 mb-3 text-center max-w-[260px]" numberOfLines={1}>
-              {user.email}
-            </Text>
-            {/* Verified badge */}
-            <View className="flex-row items-center gap-1.5 bg-green-500/10 rounded-full px-2.5 py-1">
-              <ShieldCheck color="#22C55E" size={14} />
-              <Text className="text-xs font-medium text-green-500">Verified via Google</Text>
+
+            {/* Name + subtitle */}
+            <View className="flex-1">
+              <Text className="text-[17px] font-bold text-white mb-0.5" numberOfLines={1}>
+                {user?.name ?? 'Guest'}
+              </Text>
+              <Text className="text-[13px] text-gray-400" numberOfLines={1}>
+                {user?.email ?? 'Sign in to unlock rooms & sync'}
+              </Text>
             </View>
           </View>
 
-          {/* Sign out */}
-          <Section>
-            <SettingsRow
-              icon={<LogOut color="#EF4444" size={18} />}
-              label="Sign Out"
-              onPress={handleSignOut}
-              destructive
-            />
-          </Section>
-        </ScrollView>
-      ) : (
-        /* Guest state */
-        <View
-          className="flex-1 px-6 pt-4 justify-center"
-          style={{ paddingBottom: insets.bottom + 24 }}
-        >
-          <View className="items-center mb-9">
-            <View className="w-20 h-20 rounded-full bg-gray-900 border border-gray-800 items-center justify-center mb-5">
-              <User color="#6B7280" size={40} />
-            </View>
-            <Text className="text-2xl font-bold text-white mb-2.5 text-center">
-              Sign in to CoordNav
-            </Text>
-            <Text className="text-[15px] text-gray-400 text-center leading-relaxed max-w-[280px]">
-              Create rooms, track friends in real-time, and sync your favorite places.
-            </Text>
-          </View>
-
-          {/* Google button */}
-          <TouchableOpacity
-            onPress={handleGoogleSignIn}
-            disabled={isSigningIn}
-            activeOpacity={0.85}
-            className={`flex-row items-center justify-center bg-white rounded-2xl py-4 px-6 gap-3 shadow-lg ${isSigningIn ? 'opacity-65' : ''
-              }`}
-          >
-            {isSigningIn ? (
-              <ActivityIndicator color="#0F1117" size="small" />
-            ) : (
-              <Image
-                source={{ uri: 'https://cdn-icons-png.flaticon.com/512/2991/2991148.png' }}
-                className="w-5 h-5"
-              />
+          <View className="mt-6 gap-y-4">
+            {/* ── Sign In row (guest only) ─────────────────────────────── */}
+            {!user && (
+              <GroupCard>
+                <Row
+                  iconBg="bg-blue-600"
+                  icon={
+                    isSigningIn ? (
+                      <ActivityIndicator color="#ffffff" size="small" />
+                    ) : (
+                      <Image
+                        source={{ uri: 'https://cdn-icons-png.flaticon.com/512/2991/2991148.png' }}
+                        className="w-5 h-5"
+                      />
+                    )
+                  }
+                  label={isSigningIn ? 'Connecting…' : 'Sign in with Google'}
+                  labelColor="font-semibold text-white"
+                  right={<Text className="text-[13px] font-semibold text-blue-500">Connect →</Text>}
+                  onPress={handleGoogleSignIn}
+                  disabled={isSigningIn}
+                />
+              </GroupCard>
             )}
-            <Text className="text-base font-bold text-gray-950">
-              {isSigningIn ? 'Connecting…' : 'Continue with Google'}
-            </Text>
-          </TouchableOpacity>
 
-          <Text className="text-xs text-gray-400 text-center mt-5 leading-relaxed px-4">
-            By signing in, you agree to our Terms of Service and Privacy Policy.
+            {/* ── Preferences & Support groups (mapped dynamically) ─────────── */}
+            {staticProfileGroups.map((group) => (
+              <GroupCard key={group.id}>
+                {group.items.map((item) => (
+                  <Row
+                    key={item.id}
+                    iconBg={item.iconBg}
+                    icon={item.icon}
+                    label={item.label}
+                    right={item.right}
+                    onPress={() => handleMenuPress(item.id)}
+                  />
+                ))}
+              </GroupCard>
+            ))}
+
+            {/* ── Sign Out (signed-in only) ────────────────────────────── */}
+            {user && (
+              <GroupCard>
+                <Row
+                  iconBg="bg-[#2d0f0f]"
+                  icon={<LogOut size={16} color="#ef4444" />}
+                  label="Sign Out"
+                  labelColor="text-red-500"
+                  onPress={handleSignOut}
+                />
+              </GroupCard>
+            )}
+          </View>
+
+          {/* ── Terms (guest only) ──────────────────────────────────────── */}
+          {!user && (
+            <Text className="text-xs text-gray-500 text-center mt-6 px-8 leading-relaxed">
+              By signing in, you agree to our Terms of Service and Privacy Policy.
+            </Text>
+          )}
+
+          {/* ── Version ─────────────────────────────────────────────────── */}
+          <Text className="text-[11px] text-gray-600 text-center mt-4 opacity-60">
+            CoordNav v0.1.0
           </Text>
-        </View>
+        </ScrollView>
       )}
     </View>
   );
