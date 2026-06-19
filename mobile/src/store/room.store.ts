@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { Member, Room } from "@/types/room.types";
 import { roomService } from "@/services/room.service";
+import { useAuthStore } from "./auth.store";
 
 interface RoomState {
     room : Room | null,
@@ -18,7 +19,7 @@ interface RoomState {
 export const useRoomStore = create<RoomState>((set) => ({
     room : null,
     members : [],
-    isLoading : false,
+    isLoading : true,
     actionLoading : false,
     error : null,
     createRoom : async (name : string) => {
@@ -52,13 +53,20 @@ export const useRoomStore = create<RoomState>((set) => ({
         set({ isLoading : true, error : null })
         try {
             const { room, members } = await roomService.getCurrentRoom()
-            set({ room, members, isLoading : false })
+            set({ room, members, isLoading : false, error : null })
         } catch (error : any) {
             if (error.response?.status === 404) {
-                set({ room : null, members : [], isLoading : false })
+                set({ room : null, members : [], isLoading : false, error : null })
             } else {    
                 set({ isLoading : false, error : error.response?.data?.message ?? error.message })
             }
         }
     }
 }))
+
+// Reset room store when user logs out
+useAuthStore.subscribe((state) => {
+    if (!state.user) {
+        useRoomStore.setState({ room: null, members: [], isLoading: true, error: null });
+    }
+});

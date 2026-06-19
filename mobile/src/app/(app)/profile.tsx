@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Image,
   ActivityIndicator,
-  Alert,
   ScrollView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +14,7 @@ import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/store/auth.store';
 import { authService } from '@/services/auth.service';
 import { staticProfileGroups, ProfileActionType } from '@/config/profile.config';
+import { useAlertStore } from '@/store/alert.store';
 
 // ─── Row component ────────────────────────────────────────────────────────
 
@@ -82,6 +82,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { user, isAuthLoading, setSession, clearSession } = useAuthStore();
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const showAlert = useAlertStore((s) => s.showAlert);
 
   const handleGoogleSignIn = async () => {
     setIsSigningIn(true);
@@ -90,7 +91,7 @@ export default function ProfileScreen() {
       await setSession(session);
     } catch (error: any) {
       if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
-        Alert.alert('Sign-In Failed', 'Could not complete Google Sign-In. Please try again.');
+        showAlert('Sign-In Failed', 'Could not complete Google Sign-In. Please try again.');
       }
     } finally {
       setIsSigningIn(false);
@@ -98,7 +99,7 @@ export default function ProfileScreen() {
   };
 
   const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+    showAlert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',
@@ -107,7 +108,7 @@ export default function ProfileScreen() {
           try {
             await clearSession();
           } catch {
-            Alert.alert('Sign-Out Failed', 'Could not sign out. Please try again.');
+            showAlert('Sign-Out Failed', 'Could not sign out. Please try again.');
           }
         },
       },

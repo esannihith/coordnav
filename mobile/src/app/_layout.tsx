@@ -7,6 +7,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { useAuthStore } from "@/store/auth.store";
 import { useUpdates } from "@/hooks/useUpdates";
 import { ToastHost } from "@/components/feedback/ToastHost";
+import { GlobalAlert } from "@/components/feedback/GlobalAlert";
 
 function RootLayout() {
   useUpdates();
@@ -21,6 +22,7 @@ function RootLayout() {
       <SafeAreaProvider>
         <Slot />
         <ToastHost />
+        <GlobalAlert />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

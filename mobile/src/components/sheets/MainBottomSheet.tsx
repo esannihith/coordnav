@@ -6,7 +6,7 @@ import { useRoomStore } from '../../store/useRoomStore';
 import { cn } from '../../lib/utils';
 
 // Tabs
-import { RoomTab } from './tabs/RoomTab';
+import { RoomTab } from './tabs/room';
 import { SearchTab } from './tabs/SearchTab';
 import { ChatTab } from './tabs/ChatTab';
 import { DirectionsTab } from './tabs/DirectionsTab';
