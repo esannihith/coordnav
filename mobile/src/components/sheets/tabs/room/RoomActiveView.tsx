@@ -13,6 +13,7 @@ export function RoomActiveView() {
   const {
     room,
     members,
+    onlineUserIds,
     actionLoading,
     error,
     leaveRoom,
@@ -105,6 +106,7 @@ export function RoomActiveView() {
         {members.map((member) => {
           const isSelf = member.id === user?.id;
           const displayName = member.name || 'Member';
+          const isOnline = onlineUserIds.includes(member.id) || isSelf;
 
           return (
             <View key={member.id} className="flex-row items-center py-3 border-b border-border/50">
@@ -118,7 +120,7 @@ export function RoomActiveView() {
                     </Text>
                   )}
                 </View>
-                <View className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-background bg-zinc-500" />
+                <View className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-background ${isOnline ? "bg-green-500" : "bg-zinc-500"}`} />
               </View>
 
               <View className="flex-1">

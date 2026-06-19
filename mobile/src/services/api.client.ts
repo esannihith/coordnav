@@ -12,7 +12,8 @@ interface RetryableRequestConfig
   _retry?: boolean;
 }
 
-const BASE_URL = "https://deeply-concrete-sawfish.ngrok-free.app/api/v1";
+export const SOCKET_URL = "https://deeply-concrete-sawfish.ngrok-free.app";
+const BASE_URL = `${SOCKET_URL}/api/v1`;
 
 let refreshPromise : Promise<string> | null = null;
 const REFRESH_TOKEN_KEY = "refreshToken"
@@ -52,6 +53,15 @@ async function doRefresh() : Promise<string> {
   return tokens.accessToken;
 }
 
+export async function refreshAccessToken() : Promise<string> {
+  if (!refreshPromise) {
+    refreshPromise = doRefresh().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
 apiClient.interceptors.response.use(
   (response) => response,
 
@@ -76,13 +86,7 @@ apiClient.interceptors.response.use(
     originalRequest._retry = true;
 
     try {
-      if (!refreshPromise) {
-        refreshPromise = doRefresh().finally(() => {
-          refreshPromise = null;
-        });
-      }
-
-      const newAccessToken = await refreshPromise;
+      const newAccessToken = await refreshAccessToken();
 
       originalRequest.headers.Authorization = `Bearer ${newAccessToken}`
 
