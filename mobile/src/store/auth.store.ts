@@ -12,11 +12,12 @@ interface AuthState {
   hasHydrated: boolean;
   isAuthLoading: boolean;
 
-  setAccessToken: (token : string) => void;
+  setAccessToken: (token: string) => void;
   setSession: (session: Session) => Promise<void>;
-  loadSession: () => Promise<void>;
+  loadSession: () => Promise<boolean>;
   clearSession: () => Promise<void>;
   setHasHydrated: (value: boolean) => void;
+  setAuthLoading: (value: boolean) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -27,22 +28,36 @@ export const useAuthStore = create<AuthState>()(
       hasHydrated: false,
       isAuthLoading: true,
 
-      setAccessToken: (token : string) => {
+      setAccessToken: (token: string) => {
         set({
-          accessToken : token,
-        })
+          accessToken: token,
+        });
+      },
+
+      setAuthLoading: (value: boolean) => {
+        set({ isAuthLoading: value });
       },
 
       setSession: async (session: Session) => {
-        await SecureStore.setItemAsync("refreshToken", session.tokens.refreshToken);
+        await SecureStore.setItemAsync(
+          "refreshToken",
+          session.tokens.refreshToken,
+        );
 
         set({
           user: session.user,
           accessToken: session.tokens.accessToken,
         });
+
+        try {
+          const { useRoomStore } = await import("./room.store");
+          void useRoomStore.getState().loadCurrentRoom();
+        } catch (error) {
+          console.error("Failed to load current room after login:", error);
+        }
       },
 
-      loadSession: async () => {
+      loadSession: async (): Promise<boolean> => {
         // Wait for store rehydration to complete to avoid race conditions where
         // rehydrated data overwrites session load/clear actions.
         await new Promise<void>((resolve) => {
@@ -60,24 +75,18 @@ export const useAuthStore = create<AuthState>()(
 
         set({ isAuthLoading: true });
 
-        const storedRefreshToken = await SecureStore.getItemAsync("refreshToken");
+        const storedRefreshToken =
+          await SecureStore.getItemAsync("refreshToken");
         if (!storedRefreshToken) {
           set({ user: null, accessToken: null, isAuthLoading: false });
-          return;
+          return false;
         }
-
-        try {
-          const tokens = await authService.refresh(storedRefreshToken);
-          await SecureStore.setItemAsync("refreshToken", tokens.refreshToken);
-          set({ accessToken: tokens.accessToken, isAuthLoading: false });
-        } catch {
-          await SecureStore.deleteItemAsync("refreshToken").catch(() => {});
-          set({ user: null, accessToken: null, isAuthLoading: false });
-        }
+        return true;
       },
 
       clearSession: async () => {
-        const storedRefreshToken = await SecureStore.getItemAsync("refreshToken");
+        const storedRefreshToken =
+          await SecureStore.getItemAsync("refreshToken");
 
         if (storedRefreshToken) {
           try {
@@ -111,6 +120,6 @@ export const useAuthStore = create<AuthState>()(
       onRehydrateStorage: () => () => {
         useAuthStore.getState().setHasHydrated(true);
       },
-    }
-  )
+    },
+  ),
 );

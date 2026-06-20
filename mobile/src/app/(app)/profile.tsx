@@ -91,7 +91,9 @@ export default function ProfileScreen() {
       await setSession(session);
     } catch (error: any) {
       if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
-        showAlert('Sign-In Failed', 'Could not complete Google Sign-In. Please try again.');
+        console.error('Google Sign-In Failure:', error);
+        const errMsg = error?.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
+        showAlert('Sign-In Failed', `Could not complete Google Sign-In. Details: ${errMsg}`);
       }
     } finally {
       setIsSigningIn(false);

@@ -1,23 +1,15 @@
-import React, { useEffect } from 'react';
-import { View, ActivityIndicator } from 'react-native';
-import { useAuthStore } from '@/store/auth.store';
-import { useRoomStore } from '@/store/room.store';
-import { RoomSignedOutView } from './RoomSignedOutView';
-import { RoomLobbyView } from './RoomLobbyView';
-import { RoomActiveView } from './RoomActiveView';
+import React from "react";
+import { View, ActivityIndicator } from "react-native";
+import { useAuthStore } from "@/store/auth.store";
+import { useRoomStore } from "@/store/room.store";
+import { RoomSignedOutView } from "./RoomSignedOutView";
+import { RoomLobbyView } from "./RoomLobbyView";
+import { RoomActiveView } from "./RoomActiveView";
 
 export function RoomTab() {
   const user = useAuthStore((s) => s.user);
   const room = useRoomStore((s) => s.room);
   const isLoading = useRoomStore((s) => s.isLoading);
-  const loadCurrentRoom = useRoomStore((s) => s.loadCurrentRoom);
-
-  // Load current room status on mount or when user changes
-  useEffect(() => {
-    if (user) {
-      void loadCurrentRoom();
-    }
-  }, [user, loadCurrentRoom]);
 
   if (!user) {
     return <RoomSignedOutView />;

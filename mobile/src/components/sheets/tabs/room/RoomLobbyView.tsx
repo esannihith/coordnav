@@ -1,22 +1,38 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Switch } from 'react-native';
-import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
-import { LogIn, Plus, XCircle, ChevronDown, ChevronUp, Users, Clock, Shield } from 'lucide-react-native';
-import { useRoomStore } from '@/store/room.store';
-import { normalizeRoomCode } from '@/utils/room.utils';
-import { JoinCodeBoxes } from './JoinCodeBoxes';
+import React, { useState, useRef } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  Switch,
+} from "react-native";
+import { BottomSheetTextInput } from "@gorhom/bottom-sheet";
+import {
+  LogIn,
+  Plus,
+  XCircle,
+  ChevronDown,
+  ChevronUp,
+  Users,
+  Clock,
+  Shield,
+} from "lucide-react-native";
+import { useRoomStore } from "@/store/room.store";
+import { normalizeRoomCode } from "@/utils/room.utils";
+import { JoinCodeBoxes } from "./JoinCodeBoxes";
 
 export function RoomLobbyView() {
   const { createRoom, joinRoom, actionLoading, error } = useRoomStore();
 
-  const [createRoomName, setCreateRoomName] = useState('');
-  const [joinCode, setJoinCode] = useState('');
+  const [createRoomName, setCreateRoomName] = useState("");
+  const [joinCode, setJoinCode] = useState("");
   const inputRef = useRef<any>(null);
 
   // Placeholder states for room configurations
   const [isConfigExpanded, setIsConfigExpanded] = useState(false);
-  const [maxMembers, setMaxMembers] = useState('No limit');
-  const [expiry, setExpiry] = useState('Never');
+  const [maxMembers, setMaxMembers] = useState("No limit");
+  const [expiry, setExpiry] = useState("Never");
   const [isPrivate, setIsPrivate] = useState(false);
 
   const isBusy = actionLoading;
@@ -25,7 +41,7 @@ export function RoomLobbyView() {
     if (!createRoomName.trim()) return;
     try {
       await createRoom(createRoomName);
-      setCreateRoomName('');
+      setCreateRoomName("");
     } catch {
       // Store exposes friendly error text
     }
@@ -35,7 +51,7 @@ export function RoomLobbyView() {
     if (joinCode.length !== 6) return;
     try {
       await joinRoom(joinCode);
-      setJoinCode('');
+      setJoinCode("");
     } catch {
       // Store exposes friendly error text
     }
@@ -50,7 +66,9 @@ export function RoomLobbyView() {
             <View className="w-7 h-7 rounded-lg bg-primary/20 items-center justify-center mr-2.5">
               <Plus color="#60a5fa" size={16} />
             </View>
-            <Text className="text-foreground font-semibold text-[15px]">Create Room</Text>
+            <Text className="text-foreground font-semibold text-[15px]">
+              Create Room
+            </Text>
           </View>
 
           <View className="flex-row items-center gap-2">
@@ -102,19 +120,21 @@ export function RoomLobbyView() {
                   <Text className="text-zinc-300 text-xs">Max Members</Text>
                 </View>
                 <View className="flex-row gap-x-1.5">
-                  {['No limit', '5', '10'].map((opt) => (
+                  {["No limit", "5", "10"].map((opt) => (
                     <TouchableOpacity
                       key={opt}
                       onPress={() => setMaxMembers(opt)}
                       className={`px-2 py-1 rounded-md border ${
                         maxMembers === opt
-                          ? 'bg-primary/20 border-primary'
-                          : 'bg-secondary/40 border-border'
+                          ? "bg-primary/20 border-primary"
+                          : "bg-secondary/40 border-border"
                       }`}
                     >
                       <Text
                         className={`text-[10px] ${
-                          maxMembers === opt ? 'text-primary font-bold' : 'text-muted'
+                          maxMembers === opt
+                            ? "text-primary font-bold"
+                            : "text-muted"
                         }`}
                       >
                         {opt}
@@ -131,19 +151,21 @@ export function RoomLobbyView() {
                   <Text className="text-zinc-300 text-xs">Room Expiry</Text>
                 </View>
                 <View className="flex-row gap-x-1.5">
-                  {['Never', '1 hr', '24 hr'].map((opt) => (
+                  {["Never", "1 hr", "24 hr"].map((opt) => (
                     <TouchableOpacity
                       key={opt}
                       onPress={() => setExpiry(opt)}
                       className={`px-2 py-1 rounded-md border ${
                         expiry === opt
-                          ? 'bg-primary/20 border-primary'
-                          : 'bg-secondary/40 border-border'
+                          ? "bg-primary/20 border-primary"
+                          : "bg-secondary/40 border-border"
                       }`}
                     >
                       <Text
                         className={`text-[10px] ${
-                          expiry === opt ? 'text-primary font-bold' : 'text-muted'
+                          expiry === opt
+                            ? "text-primary font-bold"
+                            : "text-muted"
                         }`}
                       >
                         {opt}
@@ -162,8 +184,8 @@ export function RoomLobbyView() {
                 <Switch
                   value={isPrivate}
                   onValueChange={setIsPrivate}
-                  trackColor={{ false: '#3f3f46', true: '#1d4ed8' }}
-                  thumbColor={isPrivate ? '#3b82f6' : '#a1a1aa'}
+                  trackColor={{ false: "#3f3f46", true: "#1d4ed8" }}
+                  thumbColor={isPrivate ? "#3b82f6" : "#a1a1aa"}
                   style={{ transform: [{ scaleX: 0.8 }, { scaleY: 0.8 }] }}
                 />
               </View>
@@ -178,12 +200,16 @@ export function RoomLobbyView() {
         {/* OR divider */}
         <View className="flex-row items-center mb-5">
           <View className="flex-1 h-px bg-border" />
-          <Text className="text-muted text-[11px] font-semibold mx-3 tracking-wider">OR</Text>
+          <Text className="text-muted text-[11px] font-semibold mx-3 tracking-wider">
+            OR
+          </Text>
           <View className="flex-1 h-px bg-border" />
         </View>
 
         {/* Join a Room Section */}
-        <Text className="text-muted text-xs font-bold uppercase tracking-wider mb-3">Join a Room</Text>
+        <Text className="text-muted text-xs font-bold uppercase tracking-wider mb-3">
+          Join a Room
+        </Text>
 
         <TouchableOpacity
           onPress={() => {
@@ -205,7 +231,7 @@ export function RoomLobbyView() {
             maxLength={6}
             autoCapitalize="characters"
             placeholder=""
-            style={{ position: 'absolute', width: 0, height: 0, opacity: 0 }}
+            style={{ position: "absolute", width: 0, height: 0, opacity: 0 }}
           />
         </TouchableOpacity>
 

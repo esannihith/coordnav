@@ -1,47 +1,53 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, ScrollView, ActivityIndicator, Image, Switch } from 'react-native';
-import { XCircle, MapPin } from 'lucide-react-native';
-import { useRoomStore } from '@/store/room.store';
-import { useAuthStore } from '@/store/auth.store';
-import { useAlertStore } from '@/store/alert.store';
-import { memberInitial } from '@/utils/room.utils';
+import React from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  ScrollView,
+  ActivityIndicator,
+  Image,
+  Switch,
+} from "react-native";
+import { XCircle, MapPin } from "lucide-react-native";
+import { useRoomStore } from "@/store/room.store";
+import { useAuthStore } from "@/store/auth.store";
+import { useAlertStore } from "@/store/alert.store";
+import { memberInitial } from "@/utils/room.utils";
 
 export function RoomActiveView() {
   const user = useAuthStore((s) => s.user);
   const showAlert = useAlertStore((s) => s.showAlert);
 
-  const {
-    room,
-    members,
-    onlineUserIds,
-    actionLoading,
-    error,
-    leaveRoom,
-  } = useRoomStore();
+  const { room, members, locations, isSharingEnabled, toggleSharingEnabled, actionLoading, error, leaveRoom } = useRoomStore();
+
+  const [tick, setTick] = React.useState(0);
+
+  React.useEffect(() => {
+    const interval = setInterval(() => {
+      setTick((t) => t + 1);
+    }, 10000); // 10s tick to trigger re-renders and decay dots without events
+    return () => clearInterval(interval);
+  }, []);
 
   const isBusy = actionLoading;
   const currentRoomCode = room?.roomCode;
   const currentRoomName = room?.name;
 
   const handleLeaveRoom = () => {
-    showAlert(
-      'Leave room?',
-      'You will leave this room.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await leaveRoom();
-            } catch (err) {
-              console.error('Error leaving room:', err);
-            }
-          },
+    showAlert("Leave room?", "You will leave this room.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Leave",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            await leaveRoom();
+          } catch (err) {
+            console.error("Error leaving room:", err);
+          }
         },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
@@ -50,39 +56,44 @@ export function RoomActiveView() {
         {/* Header strip: room name, member count, code pill */}
         <View className="flex-row items-start justify-between mb-4">
           <View className="flex-1 pr-3">
-            <Text className="text-foreground text-xl font-bold" numberOfLines={1}>
-              {currentRoomName || 'Room'}
+            <Text
+              className="text-foreground text-xl font-bold"
+              numberOfLines={1}
+            >
+              {currentRoomName || "Room"}
             </Text>
             <Text className="text-muted text-xs mt-0.5">
-              {members.length} member{members.length === 1 ? '' : 's'}
+              {members.length} member{members.length === 1 ? "" : "s"}
             </Text>
           </View>
 
           <View className="flex-row items-center gap-2">
             <View className="px-3 py-1.5 rounded-full bg-primary/15 border border-primary/30">
-              <Text className="text-primary font-mono text-xs tracking-widest">{currentRoomCode}</Text>
+              <Text className="text-primary font-mono text-xs tracking-widest">
+                {currentRoomCode}
+              </Text>
             </View>
           </View>
         </View>
 
-        {/* Live Location Sharing Row (Disabled with preview message) */}
+        {/* Live Location Sharing Row */}
         <View className="rounded-2xl px-4 py-3.5 border flex-row items-center justify-between mb-3 bg-secondary border-border">
           <View className="flex-row items-center flex-1 pr-3">
-            <View className="w-2 h-2 rounded-full mr-2.5 bg-zinc-500" />
+            <View className={`w-2 h-2 rounded-full mr-2.5 ${isSharingEnabled ? "bg-green-500" : "bg-zinc-500"}`} />
             <View className="flex-1">
-              <Text className="font-semibold text-muted">
+              <Text className="font-semibold text-foreground">
                 Live Location Sharing
               </Text>
               <Text className="text-xs text-muted mt-0.5">
-                Location sharing is off · preview coming soon
+                Location sharing is {isSharingEnabled ? "on" : "off"}
               </Text>
             </View>
           </View>
           <Switch
-            value={false}
-            disabled
-            trackColor={{ false: '#3f3f46', true: '#166534' }}
-            thumbColor="#a1a1aa"
+            value={isSharingEnabled}
+            onValueChange={toggleSharingEnabled}
+            trackColor={{ false: "#3f3f46", true: "#166534" }}
+            thumbColor={isSharingEnabled ? "#22c55e" : "#a1a1aa"}
           />
         </View>
 
@@ -91,43 +102,72 @@ export function RoomActiveView() {
           <View className="flex-row items-center justify-between mb-2">
             <View className="flex-row items-center">
               <MapPin color="#8e8e93" size={16} className="mr-1.5" />
-              <Text className="text-muted text-xs font-bold uppercase tracking-wider">Destination</Text>
+              <Text className="text-muted text-xs font-bold uppercase tracking-wider">
+                Destination
+              </Text>
             </View>
           </View>
-          <Text className="text-muted text-sm italic mt-1">No destination set.</Text>
+          <Text className="text-muted text-sm italic mt-1">
+            No destination set.
+          </Text>
         </View>
 
         {/* Members list */}
         <View className="mb-1 px-1 flex-row items-center justify-between">
-          <Text className="text-muted text-xs font-bold uppercase tracking-widest">People in Room</Text>
+          <Text className="text-muted text-xs font-bold uppercase tracking-widest">
+            People in Room
+          </Text>
           {isBusy && <ActivityIndicator size="small" color="#3b82f6" />}
         </View>
 
         {members.map((member) => {
           const isSelf = member.id === user?.id;
-          const displayName = member.name || 'Member';
-          const isOnline = onlineUserIds.includes(member.id) || isSelf;
+          const displayName = member.name || "Member";
+
+          // Self is always live. Others decay to stale/dark if not updated in the last 25s.
+          let isLive = isSelf;
+          if (!isSelf) {
+            const loc = locations[member.id];
+            if (loc && loc.updatedAt) {
+              const ageMs = Date.now() - new Date(loc.updatedAt).getTime();
+              isLive = ageMs < 25000;
+            }
+          }
 
           return (
-            <View key={member.id} className="flex-row items-center py-3 border-b border-border/50">
-              <View className="relative mr-3">
+            <View
+              key={member.id}
+              className="flex-row items-center py-3 border-b border-border/50"
+            >
+              <View className="mr-3 relative">
                 <View className="w-10 h-10 rounded-full bg-secondary border border-border items-center justify-center overflow-hidden">
                   {member.picture ? (
-                    <Image source={{ uri: member.picture }} className="w-full h-full" />
+                    <Image
+                      source={{ uri: member.picture }}
+                      className="w-full h-full"
+                    />
                   ) : (
                     <Text className="text-foreground font-bold text-sm">
                       {memberInitial(displayName)}
                     </Text>
                   )}
                 </View>
-                <View className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-background ${isOnline ? "bg-green-500" : "bg-zinc-500"}`} />
+                {/* Status Dot */}
+                <View
+                  className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-[#121214] ${
+                    isLive ? "bg-green-500" : "bg-zinc-600"
+                  }`}
+                />
               </View>
 
               <View className="flex-1">
                 <View className="flex-row items-center">
-                  <Text className="text-foreground font-semibold text-[15px]" numberOfLines={1}>
+                  <Text
+                    className="text-foreground font-semibold text-[15px]"
+                    numberOfLines={1}
+                  >
                     {displayName}
-                    {isSelf ? ' · You' : ''}
+                    {isSelf ? " · You" : ""}
                   </Text>
                 </View>
               </View>
@@ -147,7 +187,9 @@ export function RoomActiveView() {
           disabled={isBusy}
           className="bg-[#2d0f0f]/30 border border-rose-950 py-3.5 rounded-2xl items-center mt-6 mb-4"
         >
-          <Text className="text-rose-500 font-semibold text-sm">Leave Room</Text>
+          <Text className="text-rose-500 font-semibold text-sm">
+            Leave Room
+          </Text>
         </TouchableOpacity>
       </ScrollView>
 

@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, ActivityIndicator } from 'react-native';
-import { Lock } from 'lucide-react-native';
-import { statusCodes } from '@react-native-google-signin/google-signin';
-import { useAuthStore } from '@/store/auth.store';
-import { authService } from '@/services/auth.service';
-import { useAlertStore } from '@/store/alert.store';
+import React, { useState } from "react";
+import { View, Text, TouchableOpacity, ActivityIndicator } from "react-native";
+import { Lock } from "lucide-react-native";
+import { statusCodes } from "@react-native-google-signin/google-signin";
+import { useAuthStore } from "@/store/auth.store";
+import { authService } from "@/services/auth.service";
+import { useAlertStore } from "@/store/alert.store";
 
 export function RoomSignedOutView() {
   const setSession = useAuthStore((s) => s.setSession);
@@ -18,7 +18,14 @@ export function RoomSignedOutView() {
       await setSession(session);
     } catch (error: any) {
       if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
-        showAlert('Sign-In Failed', 'Could not complete Google Sign-In. Please try again.');
+        console.error("Google Sign-In Failure:", error);
+        const errMsg =
+          error?.message ||
+          (typeof error === "object" ? JSON.stringify(error) : String(error));
+        showAlert(
+          "Sign-In Failed",
+          `Could not complete Google Sign-In. Details: ${errMsg}`,
+        );
       }
     } finally {
       setIsSigningIn(false);
@@ -48,7 +55,7 @@ export function RoomSignedOutView() {
           <ActivityIndicator color="#ffffff" size="small" className="mr-2" />
         ) : null}
         <Text className="text-white font-semibold text-base">
-          {isSigningIn ? 'Connecting…' : 'Sign in with Google'}
+          {isSigningIn ? "Connecting…" : "Sign in with Google"}
         </Text>
       </TouchableOpacity>
     </View>
