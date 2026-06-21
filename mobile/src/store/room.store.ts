@@ -34,6 +34,7 @@ interface RoomState {
   refreshRoster: () => Promise<void>;
   setLocations: (list: Array<{ userId: string; lat: number; lng: number; updatedAt: string }>) => void;
   setLocation: (userId: string, payload: { lat: number; lng: number; updatedAt: string }) => void;
+  removeLocation: (userId: string) => void;
   toggleSharingEnabled: (enabled: boolean) => void;
 }
 
@@ -98,7 +99,7 @@ export const useRoomStore = create<RoomState>((set) => ({
     set({ isLoading: true, error: null });
     try {
       const { room, members } = await roomService.getCurrentRoom();
-      set({ room, members, locations: {}, isLoading: false, error: null });
+      set({ room, members, locations: {}, isLoading: false, isSharingEnabled: false, error: null });
     } catch (error: any) {
       if (error.response?.status === 404) {
         set({
@@ -171,9 +172,20 @@ export const useRoomStore = create<RoomState>((set) => ({
       };
     });
   },
+  removeLocation: (userId) => {
+    set((state) => {
+      const newLocations = { ...state.locations };
+      delete newLocations[userId];
+      return {
+        locations: newLocations,
+      };
+    });
+  },
   toggleSharingEnabled: (enabled) => {
     set({ isSharingEnabled: enabled });
   },
+
+
 }));
 
 // Reset room store when user logs out

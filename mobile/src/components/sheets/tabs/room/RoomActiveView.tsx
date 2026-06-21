@@ -124,9 +124,11 @@ export function RoomActiveView() {
           const isSelf = member.id === user?.id;
           const displayName = member.name || "Member";
 
-          // Self is always live. Others decay to stale/dark if not updated in the last 25s.
-          let isLive = isSelf;
-          if (!isSelf) {
+          // Self is green if actively sharing location. Others decay to stale/dark if not updated in the last 25s.
+          let isLive = false;
+          if (isSelf) {
+            isLive = isSharingEnabled;
+          } else {
             const loc = locations[member.id];
             if (loc && loc.updatedAt) {
               const ageMs = Date.now() - new Date(loc.updatedAt).getTime();

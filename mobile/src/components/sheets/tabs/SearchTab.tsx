@@ -353,7 +353,7 @@ export function SearchTab() {
         {searchResults.map((item: AutocompletePrediction) => (
           <TouchableOpacity
             key={item.place_id}
-            onPress={() => handlePlaceClick(item)}
+            onPress={() => {}}
             className="flex-row items-center py-4 border-b border-border"
           >
             <View className="w-10 h-10 bg-secondary rounded-full items-center justify-center mr-4">

@@ -100,7 +100,7 @@ export function PlaceTab() {
     ) : (
       <TouchableOpacity
         className="flex-1 bg-primary py-3 rounded-xl flex-row items-center justify-center"
-        onPress={handleDirections}
+        onPress={() => {}}
       >
         <Navigation color="#fff" size={20} className="mr-2" />
         <Text className="text-primary-foreground font-semibold">Directions</Text>

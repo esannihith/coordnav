@@ -8,6 +8,7 @@ import * as Location from "expo-location";
 let socketInstance: Socket | null = null;
 let rosterRefreshTimeout: ReturnType<typeof setTimeout> | null = null;
 let locationSubscription: Location.LocationSubscription | null = null;
+let heartbeatInterval: ReturnType<typeof setInterval> | null = null;
 
 const startLocationTracking = async () => {
   const isSharingEnabled = useRoomStore.getState().isSharingEnabled;
@@ -24,6 +25,7 @@ const startLocationTracking = async () => {
         await Location.enableNetworkProviderAsync();
       } catch (err) {
         console.warn("[Location] User declined to enable location services or network provider failed:", err);
+        useRoomStore.getState().toggleSharingEnabled(false);
         return;
       }
     }
@@ -31,10 +33,24 @@ const startLocationTracking = async () => {
     const { status } = await Location.requestForegroundPermissionsAsync();
     if (status !== "granted") {
       console.warn("[Location] Permission to access location was denied");
+      useRoomStore.getState().toggleSharingEnabled(false);
       return;
     }
 
     let lastEmitTime = 0;
+    let lastLocation: Location.LocationObject | null = null;
+
+    const emitLocation = (coords: { latitude: number; longitude: number }) => {
+      const socket = socketInstance;
+      if (socket && socket.connected) {
+        socket.emit("location:update", {
+          lat: coords.latitude,
+          lng: coords.longitude,
+        });
+        lastEmitTime = Date.now();
+      }
+    };
+
     locationSubscription = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.Balanced,
@@ -42,23 +58,28 @@ const startLocationTracking = async () => {
         distanceInterval: 10,
       },
       (location) => {
+        lastLocation = location;
         const now = Date.now();
         if (now - lastEmitTime < 5000) {
           return;
         }
-
-        const socket = socketInstance;
-        if (socket && socket.connected) {
-          socket.emit("location:update", {
-            lat: location.coords.latitude,
-            lng: location.coords.longitude,
-          });
-          lastEmitTime = now;
-        }
+        emitLocation(location.coords);
       }
     );
+
+    // Heartbeat to re-emit location every 15s when stationary
+    heartbeatInterval = setInterval(() => {
+      if (lastLocation) {
+        const now = Date.now();
+        if (now - lastEmitTime >= 15000) {
+          emitLocation(lastLocation.coords);
+        }
+      }
+    }, 15000);
+
   } catch (error) {
     console.error("[Location] Failed to start location tracking:", error);
+    useRoomStore.getState().toggleSharingEnabled(false);
   }
 };
 
@@ -66,6 +87,14 @@ const stopLocationTracking = () => {
   if (locationSubscription) {
     locationSubscription.remove();
     locationSubscription = null;
+  }
+  if (heartbeatInterval) {
+    clearInterval(heartbeatInterval);
+    heartbeatInterval = null;
+  }
+  const socket = socketInstance;
+  if (socket && socket.connected) {
+    socket.emit("location:share:stop");
   }
 };
 
@@ -168,6 +197,12 @@ export const socketClient = {
       if (data && typeof data.userId === "string") {
         const { userId, ...payload } = data;
         useRoomStore.getState().setLocation(userId, payload);
+      }
+    });
+
+    socketInstance.on("location:share:stopped", (data: any) => {
+      if (data && typeof data.userId === "string") {
+        useRoomStore.getState().removeLocation(data.userId);
       }
     });
 
