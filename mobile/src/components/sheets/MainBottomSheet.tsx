@@ -1,145 +1,59 @@
-import React, { useMemo, useRef, useEffect } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useMemo, useRef } from 'react';
+import { StyleSheet } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
-import { useAppStore, BottomSheetTab } from '../../store/useAppStore';
-import { useRoomStore } from '../../store/useRoomStore';
-import { cn } from '../../lib/utils';
-
-// Tabs
-import { RoomTab } from './tabs/room';
-import { SearchTab } from './tabs/SearchTab';
-import { ChatTab } from './tabs/ChatTab';
-import { DirectionsTab } from './tabs/DirectionsTab';
-import { PlaceTab } from './tabs/PlaceTab';
-import { NavTab } from './tabs/NavTab';
-
-// ── Tab & snap config driven by uiState ──
-const TAB_CONFIG: Record<string, { tabs: BottomSheetTab[], tabsWithPlace: BottomSheetTab[], snap: string[], defaultIndex: number }> = {
-  Home: { tabs: ['Room', 'Search'], tabsWithPlace: ['Room', 'Search'], snap: ['10%', '45%', '85%'], defaultIndex: 1 },
-  PlaceSearch: { tabs: ['Room', 'Search'], tabsWithPlace: ['Room', 'Place'], snap: ['10%', '45%', '85%'], defaultIndex: 1 },
-  GetDirections: { tabs: ['Directions'], tabsWithPlace: ['Directions'], snap: ['10%', '40%'], defaultIndex: 1 },
-  RouteSelection: { tabs: ['Directions'], tabsWithPlace: ['Directions'], snap: ['10%', '40%'], defaultIndex: 1 },
-  InRoomGetDirections: { tabs: ['Room', 'Chat', 'Directions'], tabsWithPlace: ['Room', 'Chat', 'Directions'], snap: ['15%', '40%', '85%'], defaultIndex: 1 },
-  NavigatingSolo: { tabs: ['Nav', 'Search'], tabsWithPlace: ['Nav', 'Place'], snap: ['15%', '45%', '75%'], defaultIndex: 0 },
-  InRoom: { tabs: ['Room', 'Chat', 'Search'], tabsWithPlace: ['Room', 'Chat', 'Place'], snap: ['10%', '40%', '85%'], defaultIndex: 1 },
-  InRoomNavigating: { tabs: ['Nav', 'Room', 'Chat', 'Search'], tabsWithPlace: ['Nav', 'Room', 'Chat', 'Place'], snap: ['15%', '40%', '75%'], defaultIndex: 0 },
-};
-
-const DEFAULT_CONFIG = { tabs: ['Room'] as BottomSheetTab[], tabsWithPlace: ['Room'] as BottomSheetTab[], snap: ['45%'], defaultIndex: 0 };
-
-// ── Tab content renderer (avoids inline conditionals in JSX) ──
-const TAB_COMPONENTS: Record<BottomSheetTab, React.ComponentType> = {
-  Room: RoomTab,
-  Search: SearchTab,
-  Place: PlaceTab,
-  Chat: ChatTab,
-  Directions: DirectionsTab,
-  Nav: NavTab,
-};
+import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { useAppStore } from '../../store';
+import { HomeSheet, CreateRoomSheet, InRoomActiveSheet } from './views';
 
 export function MainBottomSheet() {
-  const uiState = useAppStore((s) => s.uiState);
-  const isNavSessionActive = useAppStore((s) => s.isNavSessionActive);
-  const activeTab = useAppStore((s) => s.activeTab);
-  const setActiveTab = useAppStore((s) => s.setActiveTab);
-  const selectedPlace = useAppStore((s) => s.selectedPlace);
-  const searchResults = useAppStore((s) => s.searchResults);
-  const isInRoom = useRoomStore((s) => s.isInRoom);
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const snapPoints = useMemo(() => ['12%', '45%', '85%'], []);
+  const uiState = useAppStore((s) => s.uiState);
 
-  const effectiveUiState = useMemo(() => {
-    const navState = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
-    if (uiState === 'InRoomNavigating' && !isInRoom && isNavSessionActive) {
-      return 'NavigatingSolo';
+  const renderContent = () => {
+    switch (uiState) {
+      case 'Home':
+        return (
+          <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={{ flex: 1 }}>
+            <HomeSheet />
+          </Animated.View>
+        );
+      case 'CreateRoom':
+        return (
+          <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={{ flex: 1 }}>
+            <CreateRoomSheet />
+          </Animated.View>
+        );
+      case 'InRoom':
+        return (
+          <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={{ flex: 1 }}>
+            <InRoomActiveSheet />
+          </Animated.View>
+        );
+      default:
+        return (
+          <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={{ flex: 1 }}>
+            <HomeSheet />
+          </Animated.View>
+        );
     }
-
-    if (uiState === 'InRoomGetDirections' && !isInRoom) {
-      return 'GetDirections';
-    }
-
-    if (navState && !isNavSessionActive) {
-      return isInRoom ? 'InRoom' : 'Home';
-    }
-
-    const roomState = uiState === 'InRoom' || uiState === 'InRoomNavigating' || uiState === 'InRoomGetDirections';
-    if (roomState && !isInRoom) {
-      return 'Home';
-    }
-    if (!roomState && isInRoom) {
-      return 'InRoom';
-    }
-
-    return uiState;
-  }, [uiState, isNavSessionActive, isInRoom]);
-
-  const config = TAB_CONFIG[effectiveUiState] || DEFAULT_CONFIG;
-  const hasContextualResults = useMemo(
-    () => (searchResults as any[]).some((result) => result?.source === 'contextual'),
-    [searchResults]
-  );
-
-  const availableTabs = useMemo(
-    () => (selectedPlace || hasContextualResults || activeTab === 'Place') ? config.tabsWithPlace : config.tabs,
-    [config, selectedPlace, hasContextualResults, activeTab]
-  );
-
-  const snapPoints = config.snap;
-
-  // ── Snap to default index only when uiState changes ──
-  useEffect(() => {
-    bottomSheetRef.current?.snapToIndex(config.defaultIndex);
-  }, [effectiveUiState, config.defaultIndex]);
-
-  // ── Auto-select first tab if active tab is no longer valid ──
-  useEffect(() => {
-    if (!availableTabs.includes(activeTab) && availableTabs.length > 0) {
-      setActiveTab(availableTabs[0]);
-    }
-  }, [availableTabs, activeTab, setActiveTab]);
-
-  const ActiveTabComponent = TAB_COMPONENTS[activeTab];
+  };
 
   return (
     <BottomSheet
       ref={bottomSheetRef}
       snapPoints={snapPoints}
-      index={config.defaultIndex}
-      backgroundStyle={{ backgroundColor: '#1c1c1e', borderRadius: 24 }}
-      handleIndicatorStyle={{ backgroundColor: '#38383a', width: 40 }}
+      index={1}
+      backgroundStyle={{ backgroundColor: '#1e1e1e', borderRadius: 0 }}
+      handleIndicatorStyle={{ backgroundColor: '#2c2c2e', width: 40 }}
       keyboardBehavior="extend"
       keyboardBlurBehavior="restore"
       android_keyboardInputMode="adjustPan"
       enablePanDownToClose={false}
+      enableOverDrag={false}
     >
       <BottomSheetView style={styles.container}>
-        {availableTabs.length > 1 && (
-          <View className="flex-row mx-4 mb-2 bg-[#000] rounded-xl p-1">
-            {availableTabs.map((tab) => {
-              const isActive = activeTab === tab;
-              return (
-                <TouchableOpacity
-                  key={tab}
-                  onPress={() => setActiveTab(tab)}
-                  className={cn(
-                    "flex-1 items-center justify-center py-2 rounded-lg",
-                    isActive ? "bg-secondary" : "bg-transparent"
-                  )}
-                >
-                  <Text className={cn(
-                    "font-medium",
-                    isActive ? "text-foreground" : "text-muted"
-                  )}>
-                    {tab}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        )}
-
-        <View className="flex-1">
-          {ActiveTabComponent && <ActiveTabComponent />}
-        </View>
+        {renderContent()}
       </BottomSheetView>
     </BottomSheet>
   );

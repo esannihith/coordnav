@@ -7,8 +7,8 @@ import {
   type MapViewController,
   type MarkerOptions,
 } from '@googlemaps/react-native-navigation-sdk';
-import { useAuthStore } from '../../store/auth.store';
-import { useRoomStore } from '../../store/room.store';
+import { useAuthStore, useRoomStore } from '../../store';
+import { isLocationStale, isLocationDead, getLocationAgeMs } from '../../utils/room.utils';
 
 interface MemberMarkerProps {
   userId: string;
@@ -44,10 +44,8 @@ const MemberMarker = React.memo(({ userId, displayName, mapController, isMapRead
       return;
     }
 
-    const now = Date.now();
-    const ageMs = now - new Date(location.updatedAt).getTime();
-    const isStale = ageMs > 25000;
-    const isDead = ageMs > 60000;
+    const isStale = isLocationStale(location.updatedAt);
+    const isDead = isLocationDead(location.updatedAt);
 
     if (isDead) {
       if (nativeIdRef.current && mapController) {
@@ -60,6 +58,8 @@ const MemberMarker = React.memo(({ userId, displayName, mapController, isMapRead
       nativeIdRef.current = null;
       return;
     }
+
+    const ageMs = getLocationAgeMs(location.updatedAt);
 
     const newNativeId = `room-member-${userId}-${new Date(location.updatedAt).getTime()}`;
     const stalenessChanged = lastDrawnIsStaleRef.current !== isStale;
@@ -118,8 +118,13 @@ const MemberMarker = React.memo(({ userId, displayName, mapController, isMapRead
 
   return null;
 });
+MemberMarker.displayName = 'MemberMarker';
 
-function MainMapInner() {
+interface MainMapProps {
+  onMapReady?: () => void;
+}
+
+function MainMapInner({ onMapReady }: MainMapProps) {
   const members = useRoomStore((s) => s.members);
   const room = useRoomStore((s) => s.room);
 
@@ -132,7 +137,8 @@ function MainMapInner() {
 
   const handleMapReady = useCallback(() => {
     setIsMapReady(true);
-  }, []);
+    onMapReady?.();
+  }, [onMapReady]);
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -169,3 +175,4 @@ function MainMapInner() {
 }
 
 export const MainMap = React.memo(MainMapInner);
+MainMap.displayName = 'MainMap';

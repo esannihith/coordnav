@@ -9,11 +9,9 @@ const cleanLocations = (
 ) => {
   const memberIds = new Set(members.map((m) => m.id));
   const newLocations = { ...locations };
-  let changed = false;
   for (const userId in newLocations) {
     if (!memberIds.has(userId)) {
       delete newLocations[userId];
-      changed = true;
     }
   }
   return newLocations;
@@ -32,7 +30,7 @@ interface RoomState {
   leaveRoom: () => Promise<void>;
   loadCurrentRoom: () => Promise<void>;
   refreshRoster: () => Promise<void>;
-  setLocations: (list: Array<{ userId: string; lat: number; lng: number; updatedAt: string }>) => void;
+  setLocations: (list: { userId: string; lat: number; lng: number; updatedAt: string }[]) => void;
   setLocation: (userId: string, payload: { lat: number; lng: number; updatedAt: string }) => void;
   removeLocation: (userId: string) => void;
   toggleSharingEnabled: (enabled: boolean) => void;

@@ -48,13 +48,6 @@ export const useAuthStore = create<AuthState>()(
           user: session.user,
           accessToken: session.tokens.accessToken,
         });
-
-        try {
-          const { useRoomStore } = await import("./room.store");
-          void useRoomStore.getState().loadCurrentRoom();
-        } catch (error) {
-          console.error("Failed to load current room after login:", error);
-        }
       },
 
       loadSession: async (): Promise<boolean> => {

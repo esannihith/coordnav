@@ -1,10 +1,9 @@
-// src/services/http.ts
-import axios from "axios";
+import { create } from "axios";
 
 export const SOCKET_URL = "http://192.168.1.8:8000";
 const BASE_URL = `${SOCKET_URL}/api/v1`;
 
-export const baseApiClient = axios.create({
+export const baseApiClient = create({
   baseURL: BASE_URL,
   timeout: 30000,
   headers: {
@@ -12,7 +11,7 @@ export const baseApiClient = axios.create({
   },
 });
 
-export const apiClient = axios.create({
+export const apiClient = create({
   baseURL: BASE_URL,
   timeout: 30000,
   headers: {

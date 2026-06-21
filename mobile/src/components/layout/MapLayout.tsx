@@ -1,215 +1,76 @@
+// src/components/layout/MapLayout.tsx
 import React, { useEffect } from 'react';
-import { View, BackHandler, Alert, AppState } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { View, BackHandler } from 'react-native';
 import { MainMap } from '../map/MainMap';
-import { Header } from './Header';
-import { FABStack } from '../controls/FABStack';
+import { SearchBar } from './SearchBar';
 import { MainBottomSheet } from '../sheets/MainBottomSheet';
 import { useNavigation } from '@googlemaps/react-native-navigation-sdk';
-import { useAppStore } from '../../store/useAppStore';
-import { useRoomStore } from '../../store/useRoomStore';
-import {
-  isNativeGuidanceRunning,
-  resetNativeNavigationSession,
-  stopNavigation,
-  initNavSession
-} from '../../services/navigationService';
+import { useAppStore, useRoomStore, useAlertStore } from '../../store';
+import { initNavSession } from '../../services';
+import * as Location from 'expo-location';
 
 export function MapLayout() {
-  const [isMapReady, setIsMapReady] = React.useState(false);
-  const didRunStartupCleanupRef = React.useRef(false);
-  const startupRetryTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isNativeMapReady, setIsNativeMapReady] = React.useState(false);
+  const didRunInitRef = React.useRef(false);
+  const isInitializingRef = React.useRef(false);
 
   const uiState = useAppStore((s) => s.uiState);
-  const activeTab = useAppStore((s) => s.activeTab);
-  const isNavSessionActive = useAppStore((s) => s.isNavSessionActive);
-  const setUiStateAndTab = useAppStore((s) => s.setUiStateAndTab);
-  const endNavSession = useAppStore((s) => s.endNavSession);
-
-  const isInRoom = useRoomStore((s) => s.isInRoom);
+  const setUiState = useAppStore((s) => s.setUiState);
+  const room = useRoomStore((s) => s.room);
+  const isInRoom = room !== null;
   const leaveRoom = useRoomStore((s) => s.leaveRoom);
 
   const { navigationController } = useNavigation();
 
+  // Initialize SDK immediately after native map has rendered and permission is granted
   useEffect(() => {
-    const timer = setTimeout(() => setIsMapReady(true), 100);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
-    if (didRunStartupCleanupRef.current || !isMapReady) {
+    if (didRunInitRef.current || isInitializingRef.current || !isNativeMapReady) {
       return;
     }
 
-    let cancelled = false;
-
-    // Defensive startup reset: clear lingering native guidance and reconcile JS UI/session state.
-    const bootstrapCleanup = async () => {
-      // Initialize the SDK immediately so the native blue dot appears on the map
-      await initNavSession(navigationController);
-
-      const resetDone = await resetNativeNavigationSession(navigationController);
-      if (cancelled) {
-        return;
-      }
-
-      if (!resetDone) {
-        startupRetryTimerRef.current = setTimeout(() => {
-          startupRetryTimerRef.current = null;
-          void bootstrapCleanup();
-        }, 550);
-        return;
-      }
-
-      didRunStartupCleanupRef.current = true;
-      const appState = useAppStore.getState();
-      const navLikeUi = appState.uiState === 'NavigatingSolo' || appState.uiState === 'InRoomNavigating';
-      if (appState.isNavSessionActive || navLikeUi) {
-        const target = useRoomStore.getState().isInRoom ? 'InRoom' : 'Home';
-        endNavSession(target);
-      }
-    };
-
-    void bootstrapCleanup();
-
-    return () => {
-      cancelled = true;
-      if (startupRetryTimerRef.current) {
-        clearTimeout(startupRetryTimerRef.current);
-        startupRetryTimerRef.current = null;
-      }
-    };
-  }, [navigationController, endNavSession, isMapReady]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const reconcileOnActive = async () => {
-      const appState = useAppStore.getState();
-      const navLikeUi = appState.uiState === 'NavigatingSolo' || appState.uiState === 'InRoomNavigating';
-      if (!appState.isNavSessionActive) {
-        await resetNativeNavigationSession(navigationController);
-      }
-      if (cancelled) return;
-
-      if (appState.isNavSessionActive || navLikeUi) {
-        const guidanceActive = await isNativeGuidanceRunning(navigationController);
-        if (cancelled || guidanceActive) {
+    const bootstrap = async () => {
+      isInitializingRef.current = true;
+      try {
+        console.log('[MapLayout] Requesting location permissions...');
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+          console.warn('[MapLayout] Location permission not granted, init aborted');
           return;
         }
 
-        const target = useRoomStore.getState().isInRoom ? 'InRoom' : 'Home';
-        endNavSession(target);
+        const success = await initNavSession(navigationController);
+        if (success) {
+          didRunInitRef.current = true;
+        }
+      } catch (error) {
+        console.error('[MapLayout] Bootstrap failed:', error);
+      } finally {
+        isInitializingRef.current = false;
       }
     };
 
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      if (nextState === 'active') {
-        void reconcileOnActive();
-      }
-    });
+    void bootstrap();
+  }, [navigationController, isNativeMapReady]);
 
-    return () => {
-      cancelled = true;
-      subscription.remove();
-    };
-  }, [navigationController, endNavSession]);
-
+  // Sync effect: UI state mirrors Room membership
   useEffect(() => {
-    const inRoomState = uiState === 'InRoom' || uiState === 'InRoomNavigating' || uiState === 'InRoomGetDirections';
-    const navState = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
-
-    // Keep room/UI state aligned with room store state.
-    if (inRoomState && !isInRoom) {
-      if (uiState === 'InRoomNavigating' && isNavSessionActive) {
-        setUiStateAndTab('NavigatingSolo', 'Nav');
-        return;
-      }
-
-      if (uiState === 'InRoomGetDirections') {
-        setUiStateAndTab('GetDirections', 'Directions');
-        return;
-      }
-
-      setUiStateAndTab('Home', 'Search', true);
-      return;
+    if (isInRoom && uiState !== 'InRoom') {
+      setUiState('InRoom');
+    } else if (!isInRoom && uiState === 'InRoom') {
+      setUiState('Home');
     }
+  }, [isInRoom, uiState, setUiState]);
 
-    if (!inRoomState && isInRoom) {
-      setUiStateAndTab('InRoom', 'Room');
-      return;
-    }
-
-    // Keep nav UI state aligned with local nav session state.
-    if (navState && !isNavSessionActive) {
-      endNavSession(isInRoom ? 'InRoom' : 'Home');
-    }
-  }, [uiState, isInRoom, isNavSessionActive, setUiStateAndTab, endNavSession]);
-
+  // Hardware back press handler
   useEffect(() => {
     const onBackPress = () => {
-      if (uiState === 'GetDirections' || uiState === 'RouteSelection') {
-        setUiStateAndTab('PlaceSearch', 'Place');
-        return true;
-      }
-
-      if (uiState === 'InRoomGetDirections') {
-        setUiStateAndTab('InRoom', 'Place');
-        return true;
-      }
-
-      if (uiState === 'PlaceSearch') {
-        setUiStateAndTab('Home', 'Search', true);
-        return true;
-      }
-
-      if (uiState === 'NavigatingSolo') {
-        Alert.alert('Exit Navigation?', 'This will stop your current navigation session.', [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Exit',
-            style: 'destructive',
-            onPress: async () => {
-              await stopNavigation(navigationController);
-              endNavSession('Home');
-            },
-          },
-        ]);
-        return true;
-      }
-
-      if (uiState === 'InRoomNavigating') {
-        if (activeTab === 'Place') {
-          setUiStateAndTab('InRoomNavigating', 'Search', true);
-          return true;
-        }
-
-        Alert.alert('Exit Navigation?', 'This will stop your current navigation and return to the room.', [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'Exit',
-            style: 'destructive',
-            onPress: async () => {
-              await stopNavigation(navigationController);
-              endNavSession('InRoom');
-            },
-          },
-        ]);
+      if (uiState === 'CreateRoom') {
+        setUiState('Home');
         return true;
       }
 
       if (uiState === 'InRoom') {
-        if (activeTab === 'Place') {
-          setUiStateAndTab('InRoom', 'Search', true);
-          return true;
-        }
-
-        if (activeTab === 'Search' || activeTab === 'Chat') {
-          setUiStateAndTab('InRoom', 'Room');
-          return true;
-        }
-
-        Alert.alert('Leave Room?', 'Are you sure you want to leave this room?', [
+        useAlertStore.getState().showAlert('Leave Room?', 'Are you sure you want to leave this room?', [
           { text: 'Cancel', style: 'cancel' },
           {
             text: 'Leave',
@@ -222,34 +83,19 @@ export function MapLayout() {
         return true;
       }
 
-      if (uiState !== 'Home') {
-        setUiStateAndTab('Home', 'Search', true);
-        return true;
-      }
-
       return false;
     };
 
     const subscription = BackHandler.addEventListener('hardwareBackPress', onBackPress);
     return () => subscription.remove();
-  }, [uiState, activeTab, setUiStateAndTab, leaveRoom, navigationController, endNavSession]);
-
-  const isNavigating = uiState === 'NavigatingSolo' || uiState === 'InRoomNavigating';
-  const insets = useSafeAreaInsets();
+  }, [uiState, leaveRoom, setUiState]);
 
   return (
     <View className="flex-1">
-      {isMapReady && <MainMap />}
+      <MainMap onMapReady={() => setIsNativeMapReady(true)} />
 
       <View className="absolute inset-0 pointer-events-box-none">
-        {!isNavigating && <Header />}
-
-        <View
-          className="absolute right-4 pointer-events-none"
-          style={{ top: insets.top + (isNavigating ? 160 : 100) }}
-        >
-          <FABStack />
-        </View>
+        <SearchBar />
       </View>
 
       <MainBottomSheet />

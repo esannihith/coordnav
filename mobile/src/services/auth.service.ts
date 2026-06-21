@@ -19,7 +19,7 @@ export const authService = {
 
       try {
         await GoogleSignin.signOut();
-      } catch (e) {} // ignore sign out error
+      } catch {} // ignore sign out error
 
       const { data } = await GoogleSignin.signIn();
       const idToken = data?.idToken;

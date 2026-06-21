@@ -1,0 +1,192 @@
+import React, { useState } from 'react';
+import { View, Text, Pressable, ActivityIndicator } from 'react-native';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { ArrowLeft, MapPin } from 'lucide-react-native';
+import { useAppStore, useRoomStore, useAuthStore, useAlertStore } from '@/store';
+import { authService } from '@/services';
+import { statusCodes } from '@react-native-google-signin/google-signin';
+
+export function CreateRoomSheet() {
+  const setUiState = useAppStore((s) => s.setUiState);
+  const { createRoom, actionLoading, error } = useRoomStore();
+
+  const [roomName, setRoomName] = useState('');
+  const [destination, setDestination] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const showAlert = useAlertStore((s) => s.showAlert);
+
+  // Local state for interactive mock controls
+  const [maxMembers, setMaxMembers] = useState(10);
+  const [expiry, setExpiry] = useState<'1h' | '4h' | '24h'>('1h');
+
+  const handleCreate = async () => {
+    if (!roomName.trim() || isSubmitting || actionLoading) return;
+    setIsSubmitting(true);
+    try {
+      const currentUser = useAuthStore.getState().user;
+      if (currentUser === null) {
+        const resp = await authService.signInWithGoogle();
+        await useAuthStore.getState().setSession(resp);
+        await useRoomStore.getState().loadCurrentRoom();
+        
+        // If the user already has a room membership, bail out and let the sync effect route them
+        if (useRoomStore.getState().room !== null) {
+          return;
+        }
+      }
+      await createRoom(roomName);
+    } catch (err: any) {
+      if (err && err.code !== statusCodes.SIGN_IN_CANCELLED) {
+        const errMsg = err.message || String(err);
+        showAlert("Sign-In Failed", `Could not complete Google Sign-In: ${errMsg}`);
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const isBusy = actionLoading || isSubmitting;
+
+  return (
+    <View className="flex-1 px-6 pt-2">
+      {/* Top Header */}
+      <View className="flex-row items-center mb-6">
+        <Pressable
+          onPress={() => setUiState('Home')}
+          disabled={isBusy}
+          className="w-10 h-10 items-center justify-center mr-2"
+          hitSlop={8}
+        >
+          <ArrowLeft color="#ffffff" size={20} />
+        </Pressable>
+        <Text className="text-white text-lg font-bold">
+          Create a room
+        </Text>
+      </View>
+
+      {/* Room Name Input */}
+      <Text className="text-white text-xs font-semibold uppercase tracking-wider mb-2">
+        Room name
+      </Text>
+      <View className="h-10 bg-[#1e1e1e] rounded-xl border border-border px-3.5 justify-center mb-4">
+        <BottomSheetTextInput
+          value={roomName}
+          onChangeText={setRoomName}
+          placeholder="e.g. Goa Trip, Weekend Ride…"
+          placeholderTextColor="#666666"
+          editable={!isBusy}
+          className="text-foreground text-sm flex-1 p-0"
+        />
+      </View>
+
+      {/* Destination Input */}
+      <View className="flex-row items-center justify-between mb-2">
+        <View className="flex-row items-center gap-x-2">
+          <Text className="text-zinc-500 text-xs font-semibold uppercase tracking-wider">
+            Destination
+          </Text>
+          <Text className="text-[#666666] text-[10px] font-medium italic">
+            coming soon
+          </Text>
+        </View>
+      </View>
+      <View className="h-10 bg-[#1e1e1e]/50 rounded-xl border border-border/30 px-3.5 flex-row items-center mb-4 opacity-40">
+        <MapPin color="#666666" size={16} className="mr-2" />
+        <BottomSheetTextInput
+          value={destination}
+          onChangeText={setDestination}
+          placeholder="Add a destination…"
+          placeholderTextColor="#444444"
+          editable={false}
+          className="text-muted text-sm flex-1 p-0"
+        />
+      </View>
+
+      {/* Room Controls Header */}
+      <View className="flex-row items-center gap-x-2 mb-2">
+        <Text className="text-white text-xs font-semibold uppercase tracking-wider">
+          Room controls
+        </Text>
+        <Text className="text-[#666666] text-[10px] font-medium italic">
+          coming soon
+        </Text>
+      </View>
+
+      {/* Controls Row */}
+      <View className="flex-row justify-between mb-6">
+        {/* Max Members Panel */}
+        <View className="w-[47%] h-[59px] bg-[#1e1e1e] rounded-xl border border-border px-3 py-2 justify-between">
+          <Text className="text-muted text-[10px] uppercase font-semibold">
+            Max members
+          </Text>
+          <View className="flex-row items-center justify-between">
+            <Pressable
+              onPress={() => setMaxMembers(m => Math.max(1, m - 1))}
+              disabled={isBusy}
+              className="w-6 h-6 rounded bg-[#121212] items-center justify-center active:opacity-75"
+            >
+              <Text className="text-white font-bold text-sm">−</Text>
+            </Pressable>
+            <Text className="text-white font-semibold text-sm">
+              {maxMembers}
+            </Text>
+            <Pressable
+              onPress={() => setMaxMembers(m => m + 1)}
+              disabled={isBusy}
+              className="w-6 h-6 rounded bg-[#121212] items-center justify-center active:opacity-75"
+            >
+              <Text className="text-white font-bold text-sm">+</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Expiry Panel */}
+        <View className="w-[47%] h-[59px] bg-[#1e1e1e] rounded-xl border border-border px-3 py-2 justify-between">
+          <Text className="text-muted text-[10px] uppercase font-semibold">
+            Expires in
+          </Text>
+          <View className="flex-row items-center justify-between">
+            {(['1h', '4h', '24h'] as const).map((opt) => {
+              const active = expiry === opt;
+              return (
+                <Pressable
+                  key={opt}
+                  onPress={() => setExpiry(opt)}
+                  disabled={isBusy}
+                  className={`px-2 py-0.5 rounded ${active ? 'bg-primary' : 'bg-transparent'}`}
+                >
+                  <Text className={`text-[11px] font-semibold ${active ? 'text-[#121212]' : 'text-muted'}`}>
+                    {opt}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      </View>
+
+      {/* Submit Button */}
+      <Pressable
+        onPress={handleCreate}
+        disabled={isBusy || !roomName.trim()}
+        className="w-full bg-primary h-12 rounded-2xl items-center justify-center active:opacity-90"
+        style={{ opacity: roomName.trim() && !isBusy ? 1 : 0.6 }}
+      >
+        {isBusy ? (
+          <ActivityIndicator size="small" color="#121212" />
+        ) : (
+          <Text className="text-[#121212] font-bold text-[15px]">
+            Create room
+          </Text>
+        )}
+      </Pressable>
+
+      {/* Error Message */}
+      {error ? (
+        <Text className="text-red-400 text-xs text-center mt-2 px-4">
+          {error}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
