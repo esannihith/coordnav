@@ -14,9 +14,14 @@ export const roomService = {
       throw error;
     }
   },
-  getCurrentRoom: async (): Promise<{ room: Room; members: Member[] }> => {
+  getCurrentRoom: async (options?: {
+    timeoutMs?: number;
+  }): Promise<{ room: Room; members: Member[] }> => {
     try {
-      const response = await apiClient.get("/room");
+      const response = await apiClient.get(
+        "/room",
+        options?.timeoutMs ? { timeout: options.timeoutMs } : undefined,
+      );
       const { room, members } = response.data.data;
       return { room, members };
     } catch (error) {

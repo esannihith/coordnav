@@ -4,6 +4,7 @@ import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { useAppStore, useRoomStore } from '@/store';
 import { normalizeRoomCode } from '@/utils/room.utils';
 import { useRoomEntry } from '@/hooks/useRoomEntry';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function HomeSheet() {
   const setUiState = useAppStore((s) => s.setUiState);
@@ -11,6 +12,7 @@ export function HomeSheet() {
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const enterRoom = useRoomEntry();
+  const insets = useSafeAreaInsets();
 
   const handleJoin = async () => {
     if (code.length !== 6 || isSubmitting || actionLoading) return;
@@ -25,7 +27,7 @@ export function HomeSheet() {
   const isBusy = actionLoading || isSubmitting;
 
   return (
-    <View className="flex-1 px-6 pt-4">
+    <View className="flex-1 px-6 pt-4" style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
       {/* Title */}
       <Text className="text-white text-lg font-semibold mb-6">
         Start a trip

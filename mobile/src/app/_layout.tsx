@@ -16,6 +16,10 @@ LogBox.ignoreLogs([
   "InteractionManager has been deprecated",
 ]);
 
+// Bound the boot-time room load so a down/slow server doesn't hold the splash
+// for the full request timeout; the app proceeds with no room loaded.
+const BOOT_ROOM_LOAD_TIMEOUT_MS = 5000;
+
 function RootLayout() {
   useUpdates();
   const loadSession = useAuthStore((state) => state.loadSession);
@@ -29,7 +33,7 @@ function RootLayout() {
       try {
         const hasSession = await loadSession();
         if (hasSession && active) {
-          await useRoomStore.getState().loadCurrentRoom();
+          await useRoomStore.getState().loadCurrentRoom(BOOT_ROOM_LOAD_TIMEOUT_MS);
         }
       } catch (error) {
         console.error("Boot verification failed:", error);

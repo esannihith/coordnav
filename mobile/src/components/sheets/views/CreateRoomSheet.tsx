@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator } from 'react-native';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
-import { ArrowLeft, MapPin } from 'lucide-react-native';
+import { X, MapPin } from 'lucide-react-native';
 import { useAppStore, useRoomStore } from '@/store';
 import { useRoomEntry } from '@/hooks/useRoomEntry';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function CreateRoomSheet() {
   const setUiState = useAppStore((s) => s.setUiState);
@@ -13,6 +14,7 @@ export function CreateRoomSheet() {
   const [destination, setDestination] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const enterRoom = useRoomEntry();
+  const insets = useSafeAreaInsets();
 
   // Local state for interactive mock controls
   const [maxMembers, setMaxMembers] = useState(10);
@@ -31,20 +33,20 @@ export function CreateRoomSheet() {
   const isBusy = actionLoading || isSubmitting;
 
   return (
-    <View className="flex-1 px-6 pt-2">
+    <View className="flex-1 px-6 pt-2" style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
       {/* Top Header */}
-      <View className="flex-row items-center mb-6">
-        <Pressable
-          onPress={() => setUiState('Home')}
-          disabled={isBusy}
-          className="w-10 h-10 items-center justify-center mr-2"
-          hitSlop={8}
-        >
-          <ArrowLeft color="#ffffff" size={20} />
-        </Pressable>
+      <View className="flex-row items-center justify-between mb-6">
         <Text className="text-white text-lg font-bold">
           Create a room
         </Text>
+        <Pressable
+          onPress={() => setUiState('Home')}
+          disabled={isBusy}
+          className="w-10 h-10 items-center justify-center"
+          hitSlop={8}
+        >
+          <X color="#ffffff" size={20} />
+        </Pressable>
       </View>
 
       {/* Room Name Input */}

@@ -5,7 +5,7 @@ import { MainMap } from '../map/MainMap';
 import { SearchBar } from './SearchBar';
 import { MainBottomSheet } from '../sheets/MainBottomSheet';
 import { useNavigation } from '@googlemaps/react-native-navigation-sdk';
-import { useAppStore, useRoomStore, useAlertStore } from '../../store';
+import { useAppStore, useRoomStore, useAlertStore, useMapStore } from '../../store';
 import { initNavSession } from '../../services';
 import * as Location from 'expo-location';
 
@@ -64,6 +64,12 @@ export function MapLayout() {
   // Hardware back press handler
   useEffect(() => {
     const onBackPress = () => {
+      // Dismiss a place preview overlay first (slides back down to the map).
+      if (useMapStore.getState().state.kind === 'PREVIEW_PLACE') {
+        useMapStore.getState().clear();
+        return true;
+      }
+
       if (uiState === 'CreateRoom') {
         setUiState('Home');
         return true;

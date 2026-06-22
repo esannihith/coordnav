@@ -1,6 +1,8 @@
 import { io, Socket } from "socket.io-client";
 import { useAuthStore } from "@/store/auth.store";
 import { useRoomStore } from "@/store/room.store";
+import { useChatStore } from "@/store/chat.store";
+import { ChatMessage, PlaceSnapshot } from "@/types/chat.types";
 import { SOCKET_URL } from "./http";
 import { refreshAccessToken } from "./api.client";
 import * as Location from "expo-location";
@@ -107,6 +109,41 @@ const triggerDebouncedRosterRefresh = () => {
   }, 250);
 };
 
+// Optimistically add a chat message and emit it. The server echoes the clientId
+// back on chat:new so the optimistic bubble reconciles to the authoritative row;
+// chat:error (or a disconnected socket) marks it failed.
+type OutgoingChat =
+  | { kind: "TEXT"; text: string }
+  | { kind: "PLACE"; place: PlaceSnapshot };
+
+const sendChatMessage = (payload: OutgoingChat) => {
+  const user = useAuthStore.getState().user;
+  const room = useRoomStore.getState().room;
+  if (!user || !room) return;
+
+  const clientId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const optimistic: ChatMessage = {
+    id: clientId,
+    roomId: room.id,
+    sender: { id: user.id, name: user.name, picture: user.picture },
+    kind: payload.kind,
+    text: payload.kind === "TEXT" ? payload.text : undefined,
+    place: payload.kind === "PLACE" ? payload.place : undefined,
+    createdAt: new Date().toISOString(),
+    clientId,
+    status: "sending",
+  };
+
+  useChatStore.getState().addOptimistic(optimistic);
+
+  const socket = socketInstance;
+  if (socket && socket.connected) {
+    socket.emit("chat:send", { clientId, ...payload });
+  } else {
+    useChatStore.getState().failMessage(clientId);
+  }
+};
+
 export const socketClient = {
   getSocket(): Socket {
     if (socketInstance) {
@@ -206,6 +243,16 @@ export const socketClient = {
       }
     });
 
+    socketInstance.on("chat:new", (data: any) => {
+      if (data && typeof data.id === "string") {
+        useChatStore.getState().receiveMessage(data as ChatMessage);
+      }
+    });
+
+    socketInstance.on("chat:error", (data: any) => {
+      useChatStore.getState().failMessage(data?.clientId);
+    });
+
     // Advisory: a newer device took over this account. Don't wipe blindly —
     // re-validate against the server. If the refresh token was superseded the
     // refresh fails and we log out locally (no /auth/signout, so the room stays
@@ -240,6 +287,16 @@ export const socketClient = {
     }
   },
 
+  sendText(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    sendChatMessage({ kind: "TEXT", text: trimmed });
+  },
+
+  sendPlace(place: PlaceSnapshot) {
+    sendChatMessage({ kind: "PLACE", place });
+  },
+
   leaveRoom() {
     stopLocationTracking();
     if (rosterRefreshTimeout) {
@@ -271,9 +328,13 @@ useRoomStore.subscribe((state) => {
   if (currentRoomId !== previousRoomId) {
     if (currentRoomId) {
       socketClient.connect();
+      // New room context: clear any prior chat and preload this room's history.
+      useChatStore.getState().reset();
+      void useChatStore.getState().loadHistory();
     } else {
       socketClient.leaveRoom();
       socketClient.disconnect();
+      useChatStore.getState().reset();
       previousSharingEnabled = false; // Reset tracking state on exit
     }
     previousRoomId = currentRoomId;

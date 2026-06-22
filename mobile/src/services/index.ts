@@ -5,3 +5,4 @@ export * from "./http";
 export * from "./api.client";
 export * from "./socket.client";
 export * from "./places.service";
+export * from "./chat.service";

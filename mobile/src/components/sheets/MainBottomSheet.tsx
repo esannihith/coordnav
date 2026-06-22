@@ -1,18 +1,26 @@
 import React, { useMemo, useRef, useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
-import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Animated, { FadeIn, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useAppStore, useMapStore } from '../../store';
 import { HomeSheet, CreateRoomSheet, InRoomActiveSheet, PlaceDetailsSheet } from './views';
 
 export function MainBottomSheet() {
   const bottomSheetRef = useRef<BottomSheet>(null);
-  const insets = useSafeAreaInsets();
   const uiState = useAppStore((s) => s.uiState);
   const mapState = useMapStore((s) => s.state);
 
   const isPreviewingPlace = mapState.kind === 'PREVIEW_PLACE';
+
+  // Declarative two-layer model: a persistent base (Home/InRoom) and an optional
+  // overlay (CreateRoom/PlaceDetails) that slides up over it. Views are derived
+  // purely from state — nothing is imperatively pushed.
+  const baseView = uiState === 'InRoom' ? 'inRoom' : 'home';
+  const overlayView: 'place' | 'create' | null = isPreviewingPlace
+    ? 'place'
+    : uiState === 'CreateRoom'
+      ? 'create'
+      : null;
 
   const snapPoints = useMemo(() => {
     if (isPreviewingPlace) {
@@ -29,43 +37,6 @@ export function MainBottomSheet() {
     }
   }, [isPreviewingPlace]);
 
-  const renderContent = () => {
-    if (isPreviewingPlace) {
-      return (
-        <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={{ flex: 1 }}>
-          <PlaceDetailsSheet />
-        </Animated.View>
-      );
-    }
-
-    switch (uiState) {
-      case 'Home':
-        return (
-          <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={{ flex: 1 }}>
-            <HomeSheet />
-          </Animated.View>
-        );
-      case 'CreateRoom':
-        return (
-          <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={{ flex: 1 }}>
-            <CreateRoomSheet />
-          </Animated.View>
-        );
-      case 'InRoom':
-        return (
-          <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={{ flex: 1 }}>
-            <InRoomActiveSheet />
-          </Animated.View>
-        );
-      default:
-        return (
-          <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(200)} style={{ flex: 1 }}>
-            <HomeSheet />
-          </Animated.View>
-        );
-    }
-  };
-
   return (
     <BottomSheet
       ref={bottomSheetRef}
@@ -79,8 +50,30 @@ export function MainBottomSheet() {
       enablePanDownToClose={false}
       enableOverDrag={false}
     >
-      <BottomSheetView style={[styles.container, { paddingBottom: insets.bottom }]}>
-        {renderContent()}
+      <BottomSheetView style={styles.container}>
+        {/* Base layer — flex:1 so it gives the sheet content its height; always
+            mounted so its state is preserved while an overlay covers it, and so
+            it's revealed when the overlay slides away. */}
+        <Animated.View
+          key={baseView}
+          entering={FadeIn.duration(200)}
+          style={styles.container}
+        >
+          {baseView === 'inRoom' ? <InRoomActiveSheet /> : <HomeSheet />}
+        </Animated.View>
+
+        {/* Overlay layer — opaque, on top; slides up over the base on mount and
+            slides down to reveal it on unmount (Apple-Maps style). */}
+        {overlayView && (
+          <Animated.View
+            key={overlayView}
+            entering={SlideInDown.duration(280)}
+            exiting={SlideOutDown.duration(240)}
+            style={[StyleSheet.absoluteFill, styles.overlay]}
+          >
+            {overlayView === 'place' ? <PlaceDetailsSheet /> : <CreateRoomSheet />}
+          </Animated.View>
+        )}
       </BottomSheetView>
     </BottomSheet>
   );
@@ -89,5 +82,8 @@ export function MainBottomSheet() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  overlay: {
+    backgroundColor: '#1e1e1e',
   },
 });

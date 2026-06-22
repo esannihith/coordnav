@@ -47,7 +47,7 @@ interface RoomState {
   joinRoom: (roomCode: string) => Promise<RoomEntryResult>;
   applyRoomSnapshot: (room: Room | null, members: Member[]) => void;
   leaveRoom: () => Promise<void>;
-  loadCurrentRoom: () => Promise<void>;
+  loadCurrentRoom: (timeoutMs?: number) => Promise<void>;
   refreshRoster: () => Promise<void>;
   setLocations: (list: { userId: string; lat: number; lng: number; updatedAt: string }[]) => void;
   setLocation: (userId: string, payload: { lat: number; lng: number; updatedAt: string }) => void;
@@ -137,10 +137,12 @@ export const useRoomStore = create<RoomState>((set) => ({
       }
     }
   },
-  loadCurrentRoom: async () => {
+  loadCurrentRoom: async (timeoutMs?: number) => {
     set({ isLoading: true, error: null });
     try {
-      const { room, members } = await roomService.getCurrentRoom();
+      const { room, members } = await roomService.getCurrentRoom(
+        timeoutMs ? { timeoutMs } : undefined,
+      );
       set({ room, members, locations: {}, isLoading: false, isSharingEnabled: false, error: null });
     } catch (error: any) {
       if (error.response?.status === 404) {
@@ -152,6 +154,11 @@ export const useRoomStore = create<RoomState>((set) => ({
           isLoading: false,
           error: null,
         });
+      } else if (!error.response) {
+        // No response = network error / timeout (e.g. boot while the server is
+        // down or slow). Don't block the UI or show a banner — just stop loading
+        // and leave the room unloaded.
+        set({ isLoading: false, error: null });
       } else {
         set({
           isLoading: false,

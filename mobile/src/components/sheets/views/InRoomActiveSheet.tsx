@@ -5,10 +5,12 @@ import { LogOut } from 'lucide-react-native';
 import { useRoomStore, useAuthStore, useAlertStore } from '@/store';
 import { memberInitial, isLocationActive } from '@/utils/room.utils';
 import { useLivenessTick } from '@/hooks/useLivenessTick';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function InRoomActiveSheet() {
   const user = useAuthStore((s) => s.user);
   const showAlert = useAlertStore((s) => s.showAlert);
+  const insets = useSafeAreaInsets();
 
   // Re-render on a timer so member liveness (dot, label, sharing count) reflects
   // staleness over time — a disconnected member's row greys out at the 25s
@@ -146,7 +148,7 @@ export function InRoomActiveSheet() {
       </BottomSheetScrollView>
 
       {/* Leave Room Button */}
-      <View className="pt-4 pb-6">
+      <View className="pt-4" style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
         <Pressable
           onPress={handleLeaveRoom}
           disabled={isBusy}
