@@ -1,17 +1,19 @@
 import React from 'react';
-import { View, Text, Pressable, Image, Platform } from 'react-native';
+import { View, Text, Pressable, Image } from 'react-native';
 import { Search, User } from 'lucide-react-native';
 import { useRouter } from 'expo-router';
 import { useAuthStore } from '@/store';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function SearchBar() {
   const router = useRouter();
   const { user } = useAuthStore();
+  const insets = useSafeAreaInsets();
 
   return (
     <View
       className="absolute top-0 left-0 right-0 px-4 pointer-events-box-none"
-      style={{ paddingTop: Platform.OS === 'ios' ? 54 : 40, zIndex: 1000 }}
+      style={{ paddingTop: insets.top + 8, zIndex: 1000 }}
     >
       <View className="flex-row items-center w-full bg-[#1e1e1e]/90 border border-border/80 h-14 rounded-2xl px-4 shadow-lg shadow-black/40 backdrop-blur-md">
         {/* Search icon + pressable search body */}

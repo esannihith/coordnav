@@ -2,11 +2,13 @@ import React, { useMemo, useRef, useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAppStore, useMapStore } from '../../store';
 import { HomeSheet, CreateRoomSheet, InRoomActiveSheet, PlaceDetailsSheet } from './views';
 
 export function MainBottomSheet() {
   const bottomSheetRef = useRef<BottomSheet>(null);
+  const insets = useSafeAreaInsets();
   const uiState = useAppStore((s) => s.uiState);
   const mapState = useMapStore((s) => s.state);
 
@@ -77,7 +79,7 @@ export function MainBottomSheet() {
       enablePanDownToClose={false}
       enableOverDrag={false}
     >
-      <BottomSheetView style={styles.container}>
+      <BottomSheetView style={[styles.container, { paddingBottom: insets.bottom }]}>
         {renderContent()}
       </BottomSheetView>
     </BottomSheet>

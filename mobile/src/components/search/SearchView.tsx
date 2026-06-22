@@ -149,6 +149,7 @@ export function SearchView() {
             data={(showPredictions ? predictions : MOCK_RECENTS) as any[]}
             keyExtractor={item => showPredictions ? (item as PlaceAutocompletePrediction).place_id : (item as RecentSearchItem).id}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
             renderItem={({ item }) => {
               if (showPredictions) {
                 const pred = item as PlaceAutocompletePrediction;

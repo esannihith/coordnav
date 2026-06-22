@@ -3,9 +3,10 @@ import "../../global.css";
 import { Slot } from "expo-router";
 import { useEffect } from "react";
 import { SafeAreaProvider } from "react-native-safe-area-context";
-import { useAuthStore, useRoomStore } from "@/store";
+import { useAuthStore, useRoomStore, useAppStore } from "@/store";
 import { useUpdates } from "@/hooks/useUpdates";
 import { GlobalAlert } from "@/components/feedback/GlobalAlert";
+import { SystemBars } from "react-native-edge-to-edge";
 import { View, ActivityIndicator, LogBox } from "react-native";
 import "@/services/api.client";
 import "@/services/socket.client";
@@ -19,6 +20,7 @@ function RootLayout() {
   useUpdates();
   const loadSession = useAuthStore((state) => state.loadSession);
   const isAuthLoading = useAuthStore((state) => state.isAuthLoading);
+  const theme = useAppStore((state) => state.theme);
 
   // 1. Initial boot flow
   useEffect(() => {
@@ -43,6 +45,8 @@ function RootLayout() {
     };
   }, [loadSession]);
 
+  const systemBarStyle = theme === 'dark' ? 'light' : 'dark';
+
   // 3. Render splash screen during auth boot check
   if (isAuthLoading) {
     return (
@@ -54,6 +58,7 @@ function RootLayout() {
           alignItems: "center",
         }}
       >
+        <SystemBars style="light" />
         <ActivityIndicator size="large" color="#3b82f6" />
       </View>
     );
@@ -62,6 +67,7 @@ function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
+        <SystemBars style={systemBarStyle} />
         <Slot />
         <GlobalAlert />
       </SafeAreaProvider>

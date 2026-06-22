@@ -48,6 +48,7 @@ export default {
 
 
     plugins: [
+      "react-native-edge-to-edge",
       "expo-router",
       "expo-dev-client",
 
