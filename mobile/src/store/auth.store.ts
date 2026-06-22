@@ -16,6 +16,7 @@ interface AuthState {
   setSession: (session: Session) => Promise<void>;
   loadSession: () => Promise<boolean>;
   clearSession: () => Promise<void>;
+  clearSessionLocal: () => Promise<void>;
   setHasHydrated: (value: boolean) => void;
   setAuthLoading: (value: boolean) => void;
 }
@@ -77,6 +78,9 @@ export const useAuthStore = create<AuthState>()(
         return true;
       },
 
+      // Explicit, user-initiated sign out. Calls the server (which also leaves
+      // the user's room) before wiping local state. Use ONLY for the Sign Out
+      // button — never for automatic/forced logouts.
       clearSession: async () => {
         const storedRefreshToken =
           await SecureStore.getItemAsync("refreshToken");
@@ -89,6 +93,13 @@ export const useAuthStore = create<AuthState>()(
           }
         }
 
+        await useAuthStore.getState().clearSessionLocal();
+      },
+
+      // Local-only logout: wipe tokens + reset auth state with NO server call.
+      // Used for all automatic logouts (token expiry, superseded session, refresh
+      // failure) so a stale device healing itself does NOT leave the shared room.
+      clearSessionLocal: async () => {
         await SecureStore.deleteItemAsync("refreshToken").catch(() => {});
 
         set({

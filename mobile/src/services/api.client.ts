@@ -56,7 +56,7 @@ apiClient.interceptors.response.use(
     }
 
     if (originalRequest?._retry) {
-      await useAuthStore.getState().clearSession();
+      await useAuthStore.getState().clearSessionLocal();
       return Promise.reject(error);
     }
 
@@ -84,7 +84,7 @@ apiClient.interceptors.response.use(
       return apiClient(originalRequest);
     } catch (refreshError: any) {
       if (refreshError?.message !== "Session changed during refresh") {
-        await useAuthStore.getState().clearSession();
+        await useAuthStore.getState().clearSessionLocal();
       }
       return Promise.reject(refreshError);
     }

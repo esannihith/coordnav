@@ -7,7 +7,7 @@ import {
   type MapViewController,
   type MarkerOptions,
 } from '@googlemaps/react-native-navigation-sdk';
-import { useAuthStore, useRoomStore } from '../../store';
+import { useAuthStore, useRoomStore, useMapStore } from '../../store';
 import { isLocationStale, isLocationDead, getLocationAgeMs } from '../../utils/room.utils';
 
 interface MemberMarkerProps {
@@ -120,6 +120,84 @@ const MemberMarker = React.memo(({ userId, displayName, mapController, isMapRead
 });
 MemberMarker.displayName = 'MemberMarker';
 
+interface SelectedPlaceMarkerProps {
+  mapController: MapViewController | null;
+  isMapReady: boolean;
+}
+
+const SelectedPlaceMarker = React.memo(({ mapController, isMapReady }: SelectedPlaceMarkerProps) => {
+  const mapState = useMapStore((s) => s.state);
+  const nativeIdRef = useRef<string | null>(null);
+
+  const selectedPlace =
+    mapState.kind === 'PREVIEW_PLACE' || mapState.kind === 'PREVIEW_ROUTE'
+      ? mapState.place
+      : null;
+
+  useEffect(() => {
+    if (!isMapReady || !mapController || !selectedPlace || !selectedPlace.geometry?.location) {
+      if (nativeIdRef.current && mapController) {
+        try {
+          mapController.removeMarker(nativeIdRef.current);
+        } catch (err) {
+          console.warn('Failed to remove selected place marker:', err);
+        }
+      }
+      nativeIdRef.current = null;
+      return;
+    }
+
+    const newNativeId = `selected-place-${selectedPlace.place_id}`;
+    if (nativeIdRef.current === newNativeId) {
+      return;
+    }
+
+    const { lat, lng } = selectedPlace.geometry.location;
+    const markerPayload: MarkerOptions = {
+      id: newNativeId,
+      position: { lat, lng },
+      title: selectedPlace.name || 'Selected Place',
+      snippet: selectedPlace.formatted_address || '',
+    };
+
+    if (nativeIdRef.current) {
+      try {
+        mapController.removeMarker(nativeIdRef.current);
+      } catch (err) {
+        console.warn('Failed to remove old selected place marker:', err);
+      }
+    }
+
+    try {
+      void mapController.addMarker(markerPayload);
+      nativeIdRef.current = newNativeId;
+
+      // Center camera on place
+      void mapController.moveCamera({
+        target: { lat, lng },
+        zoom: 15,
+      });
+    } catch (err) {
+      console.warn('Failed to add selected place marker:', err);
+    }
+  }, [selectedPlace, mapController, isMapReady]);
+
+  useEffect(() => {
+    return () => {
+      if (nativeIdRef.current && mapController) {
+        try {
+          mapController.removeMarker(nativeIdRef.current);
+        } catch (err) {
+          console.warn('Failed to remove selected place marker on unmount:', err);
+        }
+      }
+    };
+  }, [mapController]);
+
+  return null;
+});
+SelectedPlaceMarker.displayName = 'SelectedPlaceMarker';
+
 interface MainMapProps {
   onMapReady?: () => void;
 }
@@ -161,6 +239,12 @@ function MainMapInner({ onMapReady }: MainMapProps) {
         onMapReady={handleMapReady}
         onMapViewControllerCreated={handleMapControllerCreated}
       />
+      {isMapReady && (
+        <SelectedPlaceMarker
+          mapController={mapControllerRef.current}
+          isMapReady={isMapReady}
+        />
+      )}
       {isMapReady && room && members.map((member) => (
         <MemberMarker
           key={member.id}

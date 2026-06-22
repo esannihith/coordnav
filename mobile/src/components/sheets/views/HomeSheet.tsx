@@ -1,39 +1,22 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator } from 'react-native';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
-import { useAppStore, useRoomStore, useAuthStore, useAlertStore } from '@/store';
+import { useAppStore, useRoomStore } from '@/store';
 import { normalizeRoomCode } from '@/utils/room.utils';
-import { authService } from '@/services';
-import { statusCodes } from '@react-native-google-signin/google-signin';
+import { useRoomEntry } from '@/hooks/useRoomEntry';
 
 export function HomeSheet() {
   const setUiState = useAppStore((s) => s.setUiState);
   const { joinRoom, actionLoading, error } = useRoomStore();
   const [code, setCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const showAlert = useAlertStore((s) => s.showAlert);
+  const enterRoom = useRoomEntry();
 
   const handleJoin = async () => {
     if (code.length !== 6 || isSubmitting || actionLoading) return;
     setIsSubmitting(true);
     try {
-      const currentUser = useAuthStore.getState().user;
-      if (currentUser === null) {
-        const resp = await authService.signInWithGoogle();
-        await useAuthStore.getState().setSession(resp);
-        await useRoomStore.getState().loadCurrentRoom();
-        
-        // If the user already has a room membership, bail out and let the sync effect route them
-        if (useRoomStore.getState().room !== null) {
-          return;
-        }
-      }
-      await joinRoom(code);
-    } catch (err: any) {
-      if (err && err.code !== statusCodes.SIGN_IN_CANCELLED) {
-        const errMsg = err.message || String(err);
-        showAlert("Sign-In Failed", `Could not complete Google Sign-In: ${errMsg}`);
-      }
+      await enterRoom(() => joinRoom(code));
     } finally {
       setIsSubmitting(false);
     }

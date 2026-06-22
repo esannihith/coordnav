@@ -87,7 +87,9 @@ export function ProfileView() {
     try {
       const session = await authService.signInWithGoogle();
       await setSession(session);
-      await useRoomStore.getState().loadCurrentRoom();
+      // Sign-in already returns current room state — apply it directly (no
+      // separate loadCurrentRoom round-trip).
+      useRoomStore.getState().applyRoomSnapshot(session.room, session.members);
     } catch (error: any) {
       if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
         console.error('Google Sign-In Failure:', error);

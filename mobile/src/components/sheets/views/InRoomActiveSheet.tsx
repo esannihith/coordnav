@@ -4,10 +4,16 @@ import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { LogOut } from 'lucide-react-native';
 import { useRoomStore, useAuthStore, useAlertStore } from '@/store';
 import { memberInitial, isLocationActive } from '@/utils/room.utils';
+import { useLivenessTick } from '@/hooks/useLivenessTick';
 
 export function InRoomActiveSheet() {
   const user = useAuthStore((s) => s.user);
   const showAlert = useAlertStore((s) => s.showAlert);
+
+  // Re-render on a timer so member liveness (dot, label, sharing count) reflects
+  // staleness over time — a disconnected member's row greys out at the 25s
+  // threshold instead of freezing on its last value.
+  useLivenessTick();
 
   const {
     room,

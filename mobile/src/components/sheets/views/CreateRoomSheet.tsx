@@ -2,9 +2,8 @@ import React, { useState } from 'react';
 import { View, Text, Pressable, ActivityIndicator } from 'react-native';
 import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { ArrowLeft, MapPin } from 'lucide-react-native';
-import { useAppStore, useRoomStore, useAuthStore, useAlertStore } from '@/store';
-import { authService } from '@/services';
-import { statusCodes } from '@react-native-google-signin/google-signin';
+import { useAppStore, useRoomStore } from '@/store';
+import { useRoomEntry } from '@/hooks/useRoomEntry';
 
 export function CreateRoomSheet() {
   const setUiState = useAppStore((s) => s.setUiState);
@@ -13,7 +12,7 @@ export function CreateRoomSheet() {
   const [roomName, setRoomName] = useState('');
   const [destination, setDestination] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const showAlert = useAlertStore((s) => s.showAlert);
+  const enterRoom = useRoomEntry();
 
   // Local state for interactive mock controls
   const [maxMembers, setMaxMembers] = useState(10);
@@ -23,23 +22,7 @@ export function CreateRoomSheet() {
     if (!roomName.trim() || isSubmitting || actionLoading) return;
     setIsSubmitting(true);
     try {
-      const currentUser = useAuthStore.getState().user;
-      if (currentUser === null) {
-        const resp = await authService.signInWithGoogle();
-        await useAuthStore.getState().setSession(resp);
-        await useRoomStore.getState().loadCurrentRoom();
-        
-        // If the user already has a room membership, bail out and let the sync effect route them
-        if (useRoomStore.getState().room !== null) {
-          return;
-        }
-      }
-      await createRoom(roomName);
-    } catch (err: any) {
-      if (err && err.code !== statusCodes.SIGN_IN_CANCELLED) {
-        const errMsg = err.message || String(err);
-        showAlert("Sign-In Failed", `Could not complete Google Sign-In: ${errMsg}`);
-      }
+      await enterRoom(() => createRoom(roomName));
     } finally {
       setIsSubmitting(false);
     }

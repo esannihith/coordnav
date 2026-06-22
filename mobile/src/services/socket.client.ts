@@ -156,7 +156,7 @@ export const socketClient = {
               "Failed to refresh token for socket reconnection:",
               refreshErr,
             );
-            void useAuthStore.getState().clearSession();
+            void useAuthStore.getState().clearSessionLocal();
           } else {
             console.log(
               "Socket refresh bypassed: Session changed during refresh.",
@@ -165,7 +165,7 @@ export const socketClient = {
         }
       } else if (errData && errData.code === "TOKEN_INVALID") {
         console.error("Socket authentication failed permanently:", err.message);
-        void useAuthStore.getState().clearSession();
+        void useAuthStore.getState().clearSessionLocal();
       } else {
         // Codeless transport/network error - let Socket.IO's built-in reconnection retry
         console.warn("Socket transport error, retrying reconnection...");
@@ -203,6 +203,21 @@ export const socketClient = {
     socketInstance.on("location:share:stopped", (data: any) => {
       if (data && typeof data.userId === "string") {
         useRoomStore.getState().removeLocation(data.userId);
+      }
+    });
+
+    // Advisory: a newer device took over this account. Don't wipe blindly —
+    // re-validate against the server. If the refresh token was superseded the
+    // refresh fails and we log out locally (no /auth/signout, so the room stays
+    // with the new device). If it succeeds (e.g. same-device reconnect), ignore.
+    socketInstance.on("session:superseded", async () => {
+      try {
+        await refreshAccessToken();
+      } catch (err: any) {
+        if (err?.message !== "Session changed during refresh") {
+          console.warn("Session superseded by another device; signing out.");
+          void useAuthStore.getState().clearSessionLocal();
+        }
       }
     });
 

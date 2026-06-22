@@ -3,6 +3,18 @@ import { Member, Room } from "@/types/room.types";
 import { roomService } from "@/services/room.service";
 import { useAuthStore } from "./auth.store";
 
+// Pulls the room snapshot out of a 409 ALREADY_IN_ROOM response (single `{ data }`
+// envelope), or null for any other error.
+const extractAlreadyInRoom = (
+  error: any,
+): { room: Room; members: Member[] } | null => {
+  const data = error?.response?.data?.data;
+  if (error?.response?.status === 409 && data?.errorCode === "ALREADY_IN_ROOM") {
+    return { room: data.room, members: data.members ?? [] };
+  }
+  return null;
+};
+
 const cleanLocations = (
   locations: Record<string, { lat: number; lng: number; updatedAt: string }>,
   members: Member[],
@@ -17,6 +29,12 @@ const cleanLocations = (
   return newLocations;
 };
 
+// Create/join either succeed (room is set in the store) or report that the user
+// is already in a room (carrying its snapshot so the caller can offer Rejoin).
+export type RoomEntryResult = {
+  alreadyInRoom?: { room: Room; members: Member[] };
+};
+
 interface RoomState {
   room: Room | null;
   members: Member[];
@@ -25,8 +43,9 @@ interface RoomState {
   isLoading: boolean;
   actionLoading: boolean;
   error: string | null;
-  createRoom: (name: string) => Promise<void>;
-  joinRoom: (roomCode: string) => Promise<void>;
+  createRoom: (name: string) => Promise<RoomEntryResult>;
+  joinRoom: (roomCode: string) => Promise<RoomEntryResult>;
+  applyRoomSnapshot: (room: Room | null, members: Member[]) => void;
   leaveRoom: () => Promise<void>;
   loadCurrentRoom: () => Promise<void>;
   refreshRoster: () => Promise<void>;
@@ -44,29 +63,54 @@ export const useRoomStore = create<RoomState>((set) => ({
   isLoading: true,
   actionLoading: false,
   error: null,
-  createRoom: async (name: string) => {
+  createRoom: async (name: string): Promise<RoomEntryResult> => {
     set({ actionLoading: true, error: null });
     try {
       const { room, members } = await roomService.createRoom(name);
       set({ room, members, locations: {}, isSharingEnabled: false, actionLoading: false });
+      return {};
     } catch (error: any) {
+      const conflict = extractAlreadyInRoom(error);
+      if (conflict) {
+        set({ actionLoading: false });
+        return { alreadyInRoom: conflict };
+      }
       set({
         actionLoading: false,
         error: error.response?.data?.message ?? error.message,
       });
+      return {};
     }
   },
-  joinRoom: async (roomCode: string) => {
+  joinRoom: async (roomCode: string): Promise<RoomEntryResult> => {
     set({ actionLoading: true, error: null });
     try {
       const { room, members } = await roomService.joinRoom(roomCode);
       set({ room, members, locations: {}, isSharingEnabled: false, actionLoading: false });
+      return {};
     } catch (error: any) {
+      const conflict = extractAlreadyInRoom(error);
+      if (conflict) {
+        set({ actionLoading: false });
+        return { alreadyInRoom: conflict };
+      }
       set({
         actionLoading: false,
         error: error.response?.data?.message ?? error.message,
       });
+      return {};
     }
+  },
+  applyRoomSnapshot: (room: Room | null, members: Member[]) => {
+    set({
+      room,
+      members,
+      locations: {},
+      isSharingEnabled: false,
+      isLoading: false,
+      actionLoading: false,
+      error: null,
+    });
   },
   leaveRoom: async () => {
     set({ actionLoading: true, error: null });

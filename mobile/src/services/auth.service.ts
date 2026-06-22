@@ -2,7 +2,7 @@ import {
   GoogleSignin,
   statusCodes,
 } from "@react-native-google-signin/google-signin";
-import { Session, Tokens } from "@/types/user.types";
+import { SignInResult, Tokens } from "@/types/user.types";
 import { baseApiClient } from "@/services/http";
 
 // Configure Google Sign-In with default options.
@@ -13,7 +13,7 @@ GoogleSignin.configure({
 });
 
 export const authService = {
-  signInWithGoogle: async (): Promise<Session> => {
+  signInWithGoogle: async (): Promise<SignInResult> => {
     try {
       await GoogleSignin.hasPlayServices();
 
@@ -31,8 +31,14 @@ export const authService = {
       const response = await baseApiClient.post("/auth/google-signin", {
         idToken: idToken,
       });
-      const { user, accessToken, refreshToken } = response.data.data;
-      return { user, tokens: { accessToken, refreshToken } };
+      const { user, accessToken, refreshToken, room, members } =
+        response.data.data;
+      return {
+        user,
+        tokens: { accessToken, refreshToken },
+        room: room ?? null,
+        members: members ?? [],
+      };
     } catch (error: any) {
       if (error.code !== statusCodes.SIGN_IN_CANCELLED) {
         console.error("Google Sign-In Error:", error);
