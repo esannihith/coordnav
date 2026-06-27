@@ -198,6 +198,72 @@ const SelectedPlaceMarker = React.memo(({ mapController, isMapReady }: SelectedP
 });
 SelectedPlaceMarker.displayName = 'SelectedPlaceMarker';
 
+interface DestinationMarkerProps {
+  mapController: MapViewController | null;
+  isMapReady: boolean;
+}
+
+const DestinationMarker = React.memo(({ mapController, isMapReady }: DestinationMarkerProps) => {
+  const destination = useRoomStore((s) => s.room?.destination);
+  const nativeIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!isMapReady || !mapController || !destination) {
+      if (nativeIdRef.current && mapController) {
+        try {
+          mapController.removeMarker(nativeIdRef.current);
+        } catch (err) {
+          console.warn('Failed to remove destination marker:', err);
+        }
+      }
+      nativeIdRef.current = null;
+      return;
+    }
+
+    const newNativeId = `room-destination-${destination.placeId}`;
+    if (nativeIdRef.current === newNativeId) {
+      return;
+    }
+
+    const markerPayload: MarkerOptions = {
+      id: newNativeId,
+      position: { lat: destination.lat, lng: destination.lng },
+      title: `🚩 ${destination.name}`,
+      snippet: destination.formattedAddress,
+    };
+
+    if (nativeIdRef.current) {
+      try {
+        mapController.removeMarker(nativeIdRef.current);
+      } catch (err) {
+        console.warn('Failed to remove old destination marker:', err);
+      }
+    }
+
+    try {
+      void mapController.addMarker(markerPayload);
+      nativeIdRef.current = newNativeId;
+    } catch (err) {
+      console.warn('Failed to add destination marker:', err);
+    }
+  }, [destination, mapController, isMapReady]);
+
+  useEffect(() => {
+    return () => {
+      if (nativeIdRef.current && mapController) {
+        try {
+          mapController.removeMarker(nativeIdRef.current);
+        } catch (err) {
+          console.warn('Failed to remove destination marker on unmount:', err);
+        }
+      }
+    };
+  }, [mapController]);
+
+  return null;
+});
+DestinationMarker.displayName = 'DestinationMarker';
+
 interface MainMapProps {
   onMapReady?: () => void;
 }
@@ -208,6 +274,16 @@ function MainMapInner({ onMapReady }: MainMapProps) {
 
   const [isMapReady, setIsMapReady] = useState(false);
   const mapControllerRef = useRef<MapViewController | null>(null);
+  const focusedCoords = useMapStore((s) => s.focusedCoords);
+
+  useEffect(() => {
+    if (isMapReady && mapControllerRef.current && focusedCoords) {
+      void mapControllerRef.current.moveCamera({
+        target: { lat: focusedCoords.lat, lng: focusedCoords.lng },
+        zoom: 15,
+      });
+    }
+  }, [focusedCoords, isMapReady]);
 
   const handleMapControllerCreated = useCallback((controller: MapViewController) => {
     mapControllerRef.current = controller;
@@ -241,6 +317,12 @@ function MainMapInner({ onMapReady }: MainMapProps) {
       />
       {isMapReady && (
         <SelectedPlaceMarker
+          mapController={mapControllerRef.current}
+          isMapReady={isMapReady}
+        />
+      )}
+      {isMapReady && room && (
+        <DestinationMarker
           mapController={mapControllerRef.current}
           isMapReady={isMapReady}
         />

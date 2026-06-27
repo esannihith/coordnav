@@ -11,8 +11,10 @@ interface MapStore {
   state: MapState;
   isLoading: boolean;
   error: string | null;
+  focusedCoords: { lat: number; lng: number; timestamp: number } | null;
   selectPlace: (placeId: string, sessionToken?: string) => Promise<void>;
   setPreviewRoute: (polyline: string, place: PlaceDetails) => void;
+  focusCoords: (lat: number, lng: number) => void;
   clear: () => void;
 }
 
@@ -20,6 +22,7 @@ export const useMapStore = create<MapStore>((set) => ({
   state: { kind: 'IDLE' },
   isLoading: false,
   error: null,
+  focusedCoords: null,
   selectPlace: async (placeId, sessionToken) => {
     set({ isLoading: true, error: null });
     try {
@@ -40,10 +43,14 @@ export const useMapStore = create<MapStore>((set) => ({
       state: { kind: 'PREVIEW_ROUTE', polyline, place },
     });
   },
+  focusCoords: (lat, lng) => {
+    set({ focusedCoords: { lat, lng, timestamp: Date.now() } });
+  },
   clear: () => {
     set({
       state: { kind: 'IDLE' },
       error: null,
+      focusedCoords: null,
     });
   },
 }));

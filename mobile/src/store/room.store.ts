@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import { Member, Room } from "@/types/room.types";
+import { Member, Room, Destination } from "@/types/room.types";
 import { roomService } from "@/services/room.service";
 import { useAuthStore } from "./auth.store";
 
@@ -43,7 +43,9 @@ interface RoomState {
   isLoading: boolean;
   actionLoading: boolean;
   error: string | null;
-  createRoom: (name: string) => Promise<RoomEntryResult>;
+  tempSelectedDestination: Destination | null;
+  setTempSelectedDestination: (dest: Destination | null) => void;
+  createRoom: (name: string, destination?: Destination | null) => Promise<RoomEntryResult>;
   joinRoom: (roomCode: string) => Promise<RoomEntryResult>;
   applyRoomSnapshot: (room: Room | null, members: Member[]) => void;
   leaveRoom: () => Promise<void>;
@@ -53,6 +55,7 @@ interface RoomState {
   setLocation: (userId: string, payload: { lat: number; lng: number; updatedAt: string }) => void;
   removeLocation: (userId: string) => void;
   toggleSharingEnabled: (enabled: boolean) => void;
+  updateDestination: (destination: Destination | null) => Promise<void>;
 }
 
 export const useRoomStore = create<RoomState>((set) => ({
@@ -63,11 +66,13 @@ export const useRoomStore = create<RoomState>((set) => ({
   isLoading: true,
   actionLoading: false,
   error: null,
-  createRoom: async (name: string): Promise<RoomEntryResult> => {
+  tempSelectedDestination: null,
+  setTempSelectedDestination: (dest) => set({ tempSelectedDestination: dest }),
+  createRoom: async (name: string, destination?: Destination | null): Promise<RoomEntryResult> => {
     set({ actionLoading: true, error: null });
     try {
-      const { room, members } = await roomService.createRoom(name);
-      set({ room, members, locations: {}, isSharingEnabled: false, actionLoading: false });
+      const { room, members } = await roomService.createRoom(name, destination);
+      set({ room, members, locations: {}, isSharingEnabled: false, actionLoading: false, tempSelectedDestination: null });
       return {};
     } catch (error: any) {
       const conflict = extractAlreadyInRoom(error);
@@ -233,8 +238,18 @@ export const useRoomStore = create<RoomState>((set) => ({
   toggleSharingEnabled: (enabled) => {
     set({ isSharingEnabled: enabled });
   },
-
-
+  updateDestination: async (destination) => {
+    set({ actionLoading: true, error: null });
+    try {
+      const { room, members } = await roomService.updateDestination(destination);
+      set({ room, members, actionLoading: false });
+    } catch (error: any) {
+      set({
+        actionLoading: false,
+        error: error.response?.data?.message ?? error.message,
+      });
+    }
+  },
 }));
 
 // Reset room store when user logs out
@@ -247,6 +262,7 @@ useAuthStore.subscribe((state) => {
       isSharingEnabled: false,
       isLoading: true,
       error: null,
+      tempSelectedDestination: null,
     });
   }
 });

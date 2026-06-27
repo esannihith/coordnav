@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, Pressable, TextInput, FlatList, ActivityIndicator } from 'react-native';
 import { ChevronLeft, Search, MapPin, Clock, X } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useDebounce } from '@/hooks/useDebounce';
 import { placesService } from '@/services/places.service';
 import { PlaceAutocompletePrediction } from '@/types/places.types';
-import { useMapStore } from '@/store';
+import { useMapStore, useRoomStore } from '@/store';
+import { Destination } from '@/types/room.types';
 
 interface RecentSearchItem {
   id: string;
@@ -31,6 +32,8 @@ function generateUUID() {
 
 export function SearchView() {
   const router = useRouter();
+  const searchParams = useLocalSearchParams<{ mode?: string }>();
+  const mode = searchParams.mode;
   const insets = useSafeAreaInsets();
   const [query, setQuery] = useState('');
   const debouncedQuery = useDebounce(query, 300);
@@ -159,7 +162,24 @@ export function SearchView() {
                   <Pressable
                     onPress={async () => {
                       try {
-                        await useMapStore.getState().selectPlace(pred.place_id, sessionTokenRef.current);
+                        if (mode === 'create_destination' || mode === 'active_destination') {
+                          const place = await placesService.getPlaceDetails(pred.place_id, sessionTokenRef.current);
+                          const dest: Destination = {
+                            placeId: place.place_id,
+                            name: place.name || 'Selected Place',
+                            formattedAddress: place.formatted_address || '',
+                            lat: place.geometry?.location.lat || 0,
+                            lng: place.geometry?.location.lng || 0,
+                          };
+                          
+                          if (mode === 'create_destination') {
+                            useRoomStore.getState().setTempSelectedDestination(dest);
+                          } else {
+                            await useRoomStore.getState().updateDestination(dest);
+                          }
+                        } else {
+                          await useMapStore.getState().selectPlace(pred.place_id, sessionTokenRef.current);
+                        }
                       } catch (err) {
                         console.error('Failed to select place:', err);
                       }

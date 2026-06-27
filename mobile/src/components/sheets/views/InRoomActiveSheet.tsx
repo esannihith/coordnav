@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, Text, Pressable, Image, Switch } from 'react-native';
 import { BottomSheetScrollView } from '@gorhom/bottom-sheet';
-import { LogOut } from 'lucide-react-native';
-import { useRoomStore, useAuthStore, useAlertStore } from '@/store';
+import { LogOut, Eye, Trash2, Edit3 } from 'lucide-react-native';
+import { useRoomStore, useAuthStore, useAlertStore, useMapStore } from '@/store';
+import { useRouter } from 'expo-router';
 import { memberInitial, isLocationActive } from '@/utils/room.utils';
 import { useLivenessTick } from '@/hooks/useLivenessTick';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,6 +12,7 @@ export function InRoomActiveSheet() {
   const user = useAuthStore((s) => s.user);
   const showAlert = useAlertStore((s) => s.showAlert);
   const insets = useSafeAreaInsets();
+  const router = useRouter();
 
   // Re-render on a timer so member liveness (dot, label, sharing count) reflects
   // staleness over time — a disconnected member's row greys out at the 25s
@@ -25,6 +27,7 @@ export function InRoomActiveSheet() {
     toggleSharingEnabled,
     actionLoading,
     leaveRoom,
+    updateDestination,
   } = useRoomStore();
 
   const handleLeaveRoom = () => {
@@ -85,6 +88,74 @@ export function InRoomActiveSheet() {
         contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 8 }}
         style={{ flex: 1 }}
       >
+        {/* Destination Section */}
+        {room?.destination ? (
+          <View className="mb-6 p-4 bg-[#1e1e1e] border border-border rounded-2xl flex-row items-center justify-between">
+            <View className="flex-1 pr-3">
+              <Text className="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider mb-1">
+                Destination
+              </Text>
+              <Text className="text-white text-sm font-semibold mb-0.5" numberOfLines={1}>
+                {room.destination.name}
+              </Text>
+              <Text className="text-zinc-500 text-xs" numberOfLines={1}>
+                {room.destination.formattedAddress}
+              </Text>
+            </View>
+            <View className="flex-row items-center gap-x-2">
+              <Pressable
+                onPress={() => useMapStore.getState().focusCoords(room.destination!.lat, room.destination!.lng)}
+                className="w-9 h-9 bg-secondary rounded-full items-center justify-center border border-border active:opacity-75"
+                hitSlop={4}
+              >
+                <Eye color="#a3a3a3" size={16} />
+              </Pressable>
+              <Pressable
+                onPress={() => router.push('/search?mode=active_destination' as any)}
+                className="w-9 h-9 bg-secondary rounded-full items-center justify-center border border-border active:opacity-75"
+                hitSlop={4}
+              >
+                <Edit3 color="#a3a3a3" size={16} />
+              </Pressable>
+              <Pressable
+                onPress={() => {
+                  showAlert('Clear Destination?', 'Are you sure you want to clear the room destination?', [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Clear',
+                      style: 'destructive',
+                      onPress: () => {
+                        void updateDestination(null);
+                      },
+                    },
+                  ]);
+                }}
+                className="w-9 h-9 bg-secondary rounded-full items-center justify-center border border-border active:opacity-75"
+                hitSlop={4}
+              >
+                <Trash2 color="#ef4444" size={16} />
+              </Pressable>
+            </View>
+          </View>
+        ) : (
+          <View className="mb-6 p-4 bg-[#1e1e1e] border border-border border-dashed rounded-2xl flex-row items-center justify-between">
+            <View className="flex-1 pr-3">
+              <Text className="text-zinc-500 text-[10px] font-semibold uppercase tracking-wider mb-1">
+                Destination
+              </Text>
+              <Text className="text-zinc-500 text-sm italic">
+                No destination set
+              </Text>
+            </View>
+            <Pressable
+              onPress={() => router.push('/search?mode=active_destination' as any)}
+              className="px-4 h-8 bg-secondary border border-border rounded-xl items-center justify-center active:opacity-75"
+            >
+              <Text className="text-primary font-semibold text-xs">Set</Text>
+            </Pressable>
+          </View>
+        )}
+
         <Text className="text-muted text-[10px] font-semibold uppercase tracking-wider mb-3">
           Members in Room
         </Text>

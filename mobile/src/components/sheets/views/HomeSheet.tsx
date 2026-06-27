@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, ActivityIndicator, ScrollView } from 'react-native';
-import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import { View, Text, Pressable, ActivityIndicator } from 'react-native';
+import { BottomSheetTextInput, BottomSheetScrollView } from '@gorhom/bottom-sheet';
 import { useAppStore, useRoomStore } from '@/store';
 import { normalizeRoomCode } from '@/utils/room.utils';
 import { useRoomEntry } from '@/hooks/useRoomEntry';
@@ -44,7 +44,7 @@ export function HomeSheet() {
         </Pressable>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+      <BottomSheetScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
         {/* Subtitle */}
         <Text className="text-muted text-center text-xs mb-4">
           or join an existing one
@@ -87,7 +87,7 @@ export function HomeSheet() {
             {error}
           </Text>
         ) : null}
-      </ScrollView>
+      </BottomSheetScrollView>
     </View>
   );
 }
