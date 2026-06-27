@@ -41,38 +41,43 @@ export function PlaceDetailsSheet() {
   };
 
   return (
-    <View style={{ flex: 1, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24 }}>
-      {/* Header with Title and Close Button */}
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 16 }}>
-        <View style={{ flex: 1, marginRight: 16 }}>
-          <Text style={{ fontSize: 20, fontWeight: '700', color: '#ffffff', lineHeight: 26 }} numberOfLines={2}>
-            {place.name || 'Selected Location'}
-          </Text>
-          {formattedTypes ? (
-            <Text style={{ fontSize: 13, color: '#3b82f6', marginTop: 4, fontWeight: '500' }}>{formattedTypes}</Text>
-          ) : null}
+    <View style={{ flex: 1, paddingHorizontal: 24, paddingTop: 8, paddingBottom: 24, overflow: 'hidden' }}>
+      {/* Header (Naturally 120px height: Title + Address only) */}
+      <View style={{ paddingTop: 4, paddingBottom: 12, marginBottom: 12, justifyContent: 'flex-start' }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
+          <View style={{ flex: 1, marginRight: 16 }}>
+            <Text style={{ fontSize: 20, fontWeight: '700', color: '#ffffff', lineHeight: 26 }} numberOfLines={1}>
+              {place.name || 'Selected Location'}
+            </Text>
+            {formattedTypes ? (
+              <Text style={{ fontSize: 13, color: '#3b82f6', marginTop: 2, fontWeight: '500' }}>{formattedTypes}</Text>
+            ) : null}
+          </View>
+
+          <Pressable
+            onPress={clearMap}
+            style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#2c2c2e', alignItems: 'center', justifyContent: 'center' }}
+            hitSlop={8}
+          >
+            <X color="#a3a3a3" size={20} />
+          </Pressable>
         </View>
 
-        <Pressable
-          onPress={clearMap}
-          style={{ width: 32, height: 32, borderRadius: 16, backgroundColor: '#2c2c2e', alignItems: 'center', justifyContent: 'center' }}
-          hitSlop={8}
-        >
-          <X color="#a3a3a3" size={20} />
-        </Pressable>
+        {/* Address (Always visible in peek) */}
+        {place.formatted_address ? (
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
+            <MapPin color="#a3a3a3" size={16} style={{ marginRight: 8, marginTop: 2 }} />
+            <Text style={{ flex: 1, fontSize: 13, color: '#e5e5ea', lineHeight: 18 }} numberOfLines={2}>
+              {place.formatted_address}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 16 }}
       >
-        {/* Address */}
-        {place.formatted_address ? (
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#1c1c1e' }}>
-            <MapPin color="#a3a3a3" size={18} style={{ marginRight: 12, marginTop: 2 }} />
-            <Text style={{ flex: 1, fontSize: 14, color: '#e5e5ea', lineHeight: 20 }}>{place.formatted_address}</Text>
-          </View>
-        ) : null}
 
         {/* Phone */}
         {place.formatted_phone_number ? (

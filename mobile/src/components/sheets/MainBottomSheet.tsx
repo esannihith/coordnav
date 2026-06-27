@@ -4,6 +4,7 @@ import BottomSheet, { BottomSheetView } from '@gorhom/bottom-sheet';
 import Animated, { FadeIn, SlideInDown, SlideOutDown } from 'react-native-reanimated';
 import { useAppStore, useMapStore } from '../../store';
 import { HomeSheet, CreateRoomSheet, InRoomActiveSheet, PlaceDetailsSheet } from './views';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export function MainBottomSheet() {
   const bottomSheetRef = useRef<BottomSheet>(null);
@@ -22,20 +23,18 @@ export function MainBottomSheet() {
       ? 'create'
       : null;
 
+  const insets = useSafeAreaInsets();
+
   const snapPoints = useMemo(() => {
-    if (isPreviewingPlace) {
-      return ['32%', '70%'];
-    }
-    return ['12%', '45%', '85%'];
-  }, [isPreviewingPlace]);
+    // Guarantee exactly 120 logical pixels of safe space above the bottom inset
+    const peekHeight = 120 + insets.bottom;
+    return [peekHeight, '45%', '70%'];
+  }, [insets.bottom]);
 
   useEffect(() => {
-    if (isPreviewingPlace) {
-      bottomSheetRef.current?.snapToIndex(0);
-    } else {
-      bottomSheetRef.current?.snapToIndex(1);
-    }
-  }, [isPreviewingPlace]);
+    // Whenever the base view or overlay view changes, snap to default (index 1)
+    bottomSheetRef.current?.snapToIndex(1);
+  }, [baseView, overlayView]);
 
   return (
     <BottomSheet
@@ -49,6 +48,7 @@ export function MainBottomSheet() {
       android_keyboardInputMode="adjustPan"
       enablePanDownToClose={false}
       enableOverDrag={false}
+      enableDynamicSizing={false}
     >
       <BottomSheetView style={styles.container}>
         {/* Base layer — flex:1 so it gives the sheet content its height; always

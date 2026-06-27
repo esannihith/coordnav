@@ -58,15 +58,15 @@ export function InRoomActiveSheet() {
   }, 0);
 
   return (
-    <View style={{ flex: 1, paddingTop: 8 }}>
-      {/* Room Header Strip */}
-      <View className="px-6 mb-4">
+    <View style={{ flex: 1, paddingTop: 8, overflow: 'hidden' }}>
+      {/* Header (Naturally 120px height) */}
+      <View className="px-6 pt-6 pb-6 mb-4">
         <View className="flex-row items-center justify-between">
           <View className="flex-1 pr-3">
-            <Text className="text-white text-[17px] font-bold" numberOfLines={1}>
+            <Text className="text-white text-xl font-bold" numberOfLines={1}>
               {roomName}
             </Text>
-            <Text className="text-muted text-xs mt-0.5">
+            <Text className="text-muted text-xs mt-1.5">
               {members.length} member{members.length === 1 ? '' : 's'} · {sharingCount} sharing live
             </Text>
           </View>
