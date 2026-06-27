@@ -11,6 +11,10 @@
 
 ---
 
+#Note
+- Try v1 : [Download here](https://drive.google.com/file/d/1EZxSmsEPUFmChTX4JuJmhuuZlQFVOoxG/view?usp=drive_link)
+- V1 uses firebase as serverless backend renamed as v1-legacy, v2 which is main branch now uses a backend server which is in development. 
+
 ## What Is CoordNav?
 
 CoordNav is a mobile application that unifies group coordination and turn-by-turn navigation into a single experience. It is built around the concept of a **Room** — a shared, ephemeral movement context that a group of people join for the duration of a trip or outing.
