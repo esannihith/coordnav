@@ -58,10 +58,10 @@ export function InRoomActiveSheet() {
   }, 0);
 
   return (
-    <View className="flex-1 px-6 pt-2 flex-col justify-between">
-      <BottomSheetScrollView showsVerticalScrollIndicator={false} className="flex-1">
-        {/* Room Header Strip */}
-        <View className="flex-row items-center justify-between mb-6">
+    <View style={{ flex: 1, paddingTop: 8 }}>
+      {/* Room Header Strip */}
+      <View className="px-6 mb-4">
+        <View className="flex-row items-center justify-between">
           <View className="flex-1 pr-3">
             <Text className="text-white text-[17px] font-bold" numberOfLines={1}>
               {roomName}
@@ -77,19 +77,23 @@ export function InRoomActiveSheet() {
             </Text>
           </View>
         </View>
+      </View>
 
-        {/* Section Title */}
+      {/* Members List */}
+      <BottomSheetScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 8 }}
+        style={{ flex: 1 }}
+      >
         <Text className="text-muted text-[10px] font-semibold uppercase tracking-wider mb-3">
           Members in Room
         </Text>
 
-        {/* Members List */}
         <View className="gap-y-4">
           {members.map((member) => {
             const isSelf = member.id === user?.id;
             const displayName = member.name || 'Member';
 
-            // Self is live if actively sharing location. Others are live if updated within threshold.
             let isLive = false;
             if (isSelf) {
               isLive = isSharingEnabled;
@@ -111,13 +115,13 @@ export function InRoomActiveSheet() {
                       </Text>
                     )}
                   </View>
-                  
+
                   <View className="flex-1">
                     <Text className="text-white text-sm font-medium" numberOfLines={1}>
                       {displayName} {isSelf ? '(You)' : ''}
                     </Text>
                     <Text className="text-muted text-[11px]">
-                      {isSelf 
+                      {isSelf
                         ? (isSharingEnabled ? 'sharing location' : 'sharing off')
                         : (isLive ? 'sharing location' : 'sharing off')
                       }
@@ -148,7 +152,7 @@ export function InRoomActiveSheet() {
       </BottomSheetScrollView>
 
       {/* Leave Room Button */}
-      <View className="pt-4" style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
+      <View className="px-6 pt-4" style={{ paddingBottom: Math.max(insets.bottom, 16) }}>
         <Pressable
           onPress={handleLeaveRoom}
           disabled={isBusy}

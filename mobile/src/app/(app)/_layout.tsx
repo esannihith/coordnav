@@ -16,6 +16,7 @@ export default function AppLayout() {
         <Stack.Screen name="home" />
         <Stack.Screen name="profile" options={{ presentation: 'fullScreenModal' }} />
         <Stack.Screen name="search" options={{ presentation: 'fullScreenModal' }} />
+        <Stack.Screen name="chat" options={{ presentation: 'fullScreenModal', animation: 'slide_from_bottom' }} />
       </Stack>
     </NavigationProvider>
   );
